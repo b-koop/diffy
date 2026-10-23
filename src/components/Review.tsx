@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { buildReview, countsLine, reviewCounts, type StatusFilter } from '../lib/review'
 import { isDenied } from '../lib/digest'
 import { useStore, type Comment } from '../store'
@@ -63,7 +64,7 @@ export function Review({ id }: { id: string }) {
   return (
     <main className="review">
       <header className="bar">
-        <a href={`#/p/${id}`}>‹ Workspace</a>
+        <a className="back-link" href={`#/p/${id}`}><ArrowLeft size={16} aria-hidden="true" />Workspace</a>
         <h1>{problem.title}: review</h1>
         <a href={`#/p/${id}/digest`}>Digest</a>
       </header>

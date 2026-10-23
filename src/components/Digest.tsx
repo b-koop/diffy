@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { categories, tagLabel } from '../lib/categories'
 import { buildDigest } from '../lib/digest'
 import { useStore } from '../store'
@@ -23,7 +24,7 @@ export function Digest({ id }: { id: string }) {
   return (
     <main className="digest">
       <header className="bar">
-        <a href={`#/p/${id}`}>‹ Workspace</a>
+        <a className="back-link" href={`#/p/${id}`}><ArrowLeft size={16} aria-hidden="true" />Workspace</a>
         <h1>{problem.title}: digest</h1>
       </header>
       <div className="row toolbar">

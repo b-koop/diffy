@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { createHoverWordDelay } from '../lib/hoverWordDelay'
 import { useStore } from '../store'
 import { AskPanel } from './AskPanel'
@@ -60,7 +61,7 @@ export function Workspace({ id }: { id: string }) {
       <AskPanel problem={problem} />
       <main>
         <header className="bar">
-          <a href="#/">‹ Reviews</a>
+          <a className="back-link" href="#/"><ArrowLeft size={16} aria-hidden="true" />Reviews</a>
           <h1>{problem.title}</h1>
           <a href={`#/p/${id}/digest`}>Digest</a>
           <a href={`#/p/${id}/review`}>Review</a>

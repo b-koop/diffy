@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { categories, isBuiltIn, resolveTag, tagLabel } from '../lib/categories'
 import { canCreateTag, findSimilarTag, moveHighlight, suggestTags } from '../lib/suggest'
 import { useStore } from '../store'
@@ -79,7 +80,7 @@ export function TagPicker({ value, onChange }: Props) {
           <span className="chip" key={t}>
             {tagLabel(t)}
             <button type="button" aria-label={`Remove ${tagLabel(t)}`} onClick={() => toggle(t)}>
-              ×
+              <X size={14} aria-hidden="true" />
             </button>
           </span>
         ))}

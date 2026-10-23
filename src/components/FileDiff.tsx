@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Copy } from 'lucide-react'
 import { Diff, Hunk, getChangeKey, pickRanges, tokenize, type ChangeData, type HunkData, type TokenNode } from 'react-diff-view'
 import refractor from 'refractor/core'
 import bash from 'refractor/lang/bash.js'
@@ -20,6 +21,7 @@ import { CommentView } from './CommentView'
 import { changeAt, lineOf, resolveClick } from './util'
 import { countFileMatches, getSearchRanges, getTokenRanges, tokenAt } from '../lib/diffSearch'
 import { countLineChanges } from '../lib/diffStats'
+import { copyTextToClipboard } from '../lib/clipboard'
 
 for (const grammar of [bash, css, go, json, jsx, markup, python, rust, sql, tsx, yaml]) refractor.register(grammar)
 
@@ -59,6 +61,7 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
   const [pending, setPending] = useState<Pos>()
   const [notice, setNotice] = useState('')
   const [fileForm, setFileForm] = useState(false)
+  const [copyStatus, setCopyStatus] = useState('')
 
   useEffect(() => {
     if (!pending) return
@@ -80,6 +83,10 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
       setPending(undefined)
       setCompose({ ...r.start, ...(r.kind === 'range' && { end: r.end }) })
     }
+  }
+
+  const copyPath = async () => {
+    setCopyStatus(await copyTextToClipboard(file.path) ? 'Copied' : 'Copy failed')
   }
 
   const diffType = file.isNew ? 'add' : file.isDeleted ? 'delete' : file.isRenamed ? 'rename' : 'modify'
@@ -167,17 +174,23 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
   return (
     <section className="file">
       <div className="file-bar">
-        <button type="button" className="file-head" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <span>{open ? '▾' : '▸'}</span>
-          <span className={matchCount > 0 ? 'path file-match' : 'path'}>{file.path}</span>
-          <span className="diff-stats" aria-label={`${lineChanges.additions} lines added, ${lineChanges.deletions} lines removed`}>
-            <span className="diff-insertions">+{lineChanges.additions}</span>
-            <span className="diff-deletions">−{lineChanges.deletions}</span>
-          </span>
-          {matchCount > 0 && <span className="badge search-count">{matchCount} match{matchCount === 1 ? '' : 'es'}</span>}
-          {badge(file) && <span className="badge">{badge(file)}</span>}
-          {mine.length > 0 && <span className="badge">{mine.length} comment{mine.length > 1 ? 's' : ''}</span>}
-        </button>
+        <div className="file-path-controls">
+          <button type="button" className="file-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+            <span className={matchCount > 0 ? 'path file-match' : 'path'}>{file.path}</span>
+          </button>
+          <button type="button" className="icon-button" aria-label="Copy file path" title="Copy file path" onClick={() => void copyPath()}>
+            <Copy size={16} aria-hidden="true" />
+          </button>
+          {copyStatus && <span className="copy-status muted" role="status">{copyStatus}</span>}
+        </div>
+        <span className="diff-stats" aria-label={`${lineChanges.additions} lines added, ${lineChanges.deletions} lines removed`}>
+          <span className="diff-insertions">+{lineChanges.additions}</span>
+          <span className="diff-deletions">−{lineChanges.deletions}</span>
+        </span>
+        {matchCount > 0 && <span className="badge search-count">{matchCount} match{matchCount === 1 ? '' : 'es'}</span>}
+        {badge(file) && <span className="badge">{badge(file)}</span>}
+        {mine.length > 0 && <span className="badge">{mine.length} comment{mine.length > 1 ? 's' : ''}</span>}
         <button type="button" className="secondary" onClick={() => setFileForm(true)}>
           Comment on file
         </button>

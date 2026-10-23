@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { copyTextToClipboard } from '../lib/clipboard'
 import { outputNotes, outputSummary } from '../lib/digest'
 import { useStore, type Problem } from '../store'
 
@@ -17,12 +19,7 @@ export function NotesModal({ problem, onClose }: { problem: Problem; onClose(): 
   }, [])
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setStatus('Copied')
-    } catch {
-      setStatus('Copy failed')
-    }
+    setStatus(await copyTextToClipboard(text) ? 'Copied' : 'Copy failed')
   }
 
   return (
@@ -39,7 +36,9 @@ export function NotesModal({ problem, onClose }: { problem: Problem; onClose(): 
         <div className="row">
           <button type="button" onClick={copy}>Copy</button>
           {status && <span role="status" className="muted">{status}</span>}
-          <button type="button" className="secondary" onClick={() => ref.current?.close()}>Close</button>
+          <button type="button" className="secondary icon-button" aria-label="Close output notes" title="Close" onClick={() => ref.current?.close()}>
+            <X size={18} aria-hidden="true" />
+          </button>
         </div>
       </div>
     </dialog>
