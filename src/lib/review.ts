@@ -27,6 +27,13 @@ export function reviewCounts(problem: Problem, comments: Comment[]) {
 /** "9 approved, 3 denied" */
 export const countsLine = ({ approved, denied }: { approved: number; denied: number }) => `${approved} approved, ${denied} denied`
 
+/** Reviews are appended in creation/import order; the landing page presents the newest first. */
+export const sortProblemsNewestFirst = (problems: Problem[]): Problem[] =>
+  problems.reduceRight<Problem[]>((newestFirst, problem) => {
+    newestFirst.push(problem)
+    return newestFirst
+  }, [])
+
 /**
  * The review list: per candidate (tab order), comments ordered by file, whole-file first, then line
  * (same order as the output notes). Candidates with nothing to show are kept so the structure stays stable.

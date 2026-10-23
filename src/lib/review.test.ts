@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Comment, Problem } from '../store'
-import { buildReview, countsLine, reviewCounts } from './review'
+import { buildReview, countsLine, reviewCounts, sortProblemsNewestFirst } from './review'
 
 const diff = (file: string) => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-a\n+b\n`
 const problem: Problem = {
@@ -30,6 +30,17 @@ const comments = [
   cm('other', 'zzz', 'a.ts', 1),
 ]
 const ids = (g: ReturnType<typeof buildReview>) => g.map((x) => x.items.map((i) => i.comment.id))
+
+describe('landing page review order', () => {
+  it('sorts recently added reviews before older reviews without mutating the source list', () => {
+    const older = { ...problem, id: 'older', title: 'Older review' }
+    const newer = { ...problem, id: 'newer', title: 'Newer review' }
+    const reviews = [older, newer]
+
+    expect(sortProblemsNewestFirst(reviews)).toEqual([newer, older])
+    expect(reviews).toEqual([older, newer])
+  })
+})
 
 describe('buildReview', () => {
   it('orders by candidate, then file, then whole-file before lines, and labels locations', () => {

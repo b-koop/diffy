@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { parseProblemFile } from '../lib/problemFile'
+import { sortProblemsNewestFirst } from '../lib/review'
 import { exportProblem, readFile } from './util'
 
 export function ProblemsList() {
@@ -8,6 +9,7 @@ export function ProblemsList() {
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
+  const newestProblems = sortProblemsNewestFirst(problems)
 
   return (
     <main>
@@ -27,7 +29,7 @@ export function ProblemsList() {
       </form>
       {problems.length === 0 && <p className="muted">No reviews yet.</p>}
       <ul className="problems">
-        {problems.map((p) => (
+        {newestProblems.map((p) => (
           <li key={p.id}>
             <a href={`#/p/${p.id}`}>{p.title}</a>
             <span className="muted">{p.candidates.length} candidate(s)</span>
