@@ -1,0 +1,33 @@
+{
+  "name": "diffy",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:file": "vitest run",
+    "deploy": "vite build && wrangler deploy"
+  },
+  "dependencies": {
+    "gitdiff-parser": "^0.3.1",
+    "idb-keyval": "^6.3.0",
+    "react": "^19.3.1",
+    "react-diff-view": "^3.3.3",
+    "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "refractor": "^3.6.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.2"
+  }
+}
