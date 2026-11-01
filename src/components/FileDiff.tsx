@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Copy } from 'lucide-react'
-import { Diff, Hunk, getChangeKey, pickRanges, tokenize, type ChangeData, type HunkData, type TokenNode } from 'react-diff-view'
+import { Diff, Hunk, getChangeKey, markEdits, pickRanges, tokenize, type ChangeData, type HunkData, type TokenNode } from 'react-diff-view'
 import refractor from 'refractor/core'
 import bash from 'refractor/lang/bash.js'
 import css from 'refractor/lang/css.js'
@@ -14,14 +14,16 @@ import sql from 'refractor/lang/sql.js'
 import tsx from 'refractor/lang/tsx.js'
 import yaml from 'refractor/lang/yaml.js'
 import type { DiffFile } from '../lib/parseDiff'
-import { makeRangeSnippet, makeSnippet, rangeChanges, type Pos } from '../lib/snippet'
+import { linkedPositions, locate, makeLinkedSnippet, makeRangeSnippet, makeSnippet, rangeChanges, type Pos } from '../lib/snippet'
 import { useStore, type Comment } from '../store'
 import { CommentForm } from './CommentForm'
 import { CommentView } from './CommentView'
 import { changeAt, lineOf, resolveClick } from './util'
-import { countFileMatches, getSearchRanges, getTokenRanges, tokenAt } from '../lib/diffSearch'
+import { countFileMatches, getSearchRanges, tokenAt } from '../lib/diffSearch'
 import { countLineChanges } from '../lib/diffStats'
+import { codePointAt } from '../lib/codeSelection'
 import { copyTextToClipboard } from '../lib/clipboard'
+import { locationLabel } from '../lib/location'
 
 for (const grammar of [bash, css, go, json, jsx, markup, python, rust, sql, tsx, yaml]) refractor.register(grammar)
 
@@ -32,8 +34,6 @@ interface Props {
   viewType: 'split' | 'unified'
   openAll: { open: boolean; version: number }
   query: string
-  hoveredWord?: string
-  selectedText?: string
   onHoverWord(word?: string): void
 }
 
@@ -51,27 +51,63 @@ const languageFor = (path: string) => ({
   yml: 'yaml', sh: 'bash', sql: 'sql',
 } as Record<string, string>)[path.split('.').pop()?.toLowerCase() ?? '']
 
-export function FileDiff({ file, candidateId, comments, viewType, openAll, query, hoveredWord, selectedText, onHoverWord }: Props) {
+export function FileDiff({ file, candidateId, comments, viewType, openAll, query, onHoverWord }: Props) {
   const addComment = useStore((s) => s.addComment)
   const [open, setOpen] = useState(false)
   useEffect(() => setOpen(openAll.open), [openAll.open, openAll.version])
   const matchCount = countFileMatches(file, query)
   const lineChanges = countLineChanges(file.hunks)
-  const [compose, setCompose] = useState<{ side: Pos['side']; lineNumber: number; end?: Pos }>()
+  const [compose, setCompose] = useState<{ side: Pos['side']; lineNumber: number; end?: Pos; lines?: Pos[] }>()
   const [pending, setPending] = useState<Pos>()
+  const [linking, setLinking] = useState(false)
+  const [linked, setLinked] = useState<Pos[]>([])
+  const [lineInput, setLineInput] = useState('')
   const [notice, setNotice] = useState('')
   const [fileForm, setFileForm] = useState(false)
   const [copyStatus, setCopyStatus] = useState('')
+  const composerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!pending) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && (setPending(undefined), setNotice(''))
+    if (!compose) return
+    composerRef.current?.scrollIntoView({ block: 'nearest' })
+    composerRef.current?.querySelector('input')?.focus({ preventScroll: true })
+  }, [compose])
+
+  useEffect(() => {
+    setPending(undefined)
+    setCompose(undefined)
+    setLinked([])
+    setLinking(false)
+    setLineInput('')
+    setNotice('')
+  }, [file.hunks])
+
+  const cancelLinks = () => {
+    setLinked([])
+    setLinking(false)
+    setLineInput('')
+    setNotice('')
+  }
+
+  useEffect(() => {
+    if (!pending && !linking) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setPending(undefined)
+      cancelLinks()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pending])
+  }, [pending, linking])
 
   const onGutterClick = (p: Pos) => {
     setNotice('')
+    if (linking) {
+      const row = locate(file.hunks, p.side, p.lineNumber)?.change
+      setLinked((current) => linkedPositions(file.hunks, current.some((item) => locate(file.hunks, item.side, item.lineNumber)?.change === row)
+        ? current.filter((item) => locate(file.hunks, item.side, item.lineNumber)?.change !== row) : [...current, p]))
+      return
+    }
     const r = resolveClick(file.hunks, pending, p)
     if (r.kind === 'cross') {
       setPending(undefined)
@@ -102,26 +138,30 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
     }
     for (const c of mine) {
       if (c.side === undefined || c.lineNumber === undefined) continue
-      const ch = changeAt(file.hunks, c.end?.side ?? c.side, c.end?.lineNumber ?? c.lineNumber)
+      const anchor = c.lines?.at(-1) ?? c.end ?? c
+      const ch = changeAt(file.hunks, anchor.side!, anchor.lineNumber!)
       if (ch) slot(ch as ChangeData).comments.push(c)
     }
     if (compose) {
-      const ch = changeAt(file.hunks, compose.end?.side ?? compose.side, compose.end?.lineNumber ?? compose.lineNumber)
+      const anchor = compose.lines?.at(-1) ?? compose.end ?? compose
+      const ch = changeAt(file.hunks, anchor.side, anchor.lineNumber)
       if (ch) slot(ch as ChangeData).compose = true
     }
     return Object.fromEntries(
       [...byKey].map(([k, v]) => [
         k,
-        <div className="widget" key={k}>
+        <div className="widget" key={k} ref={v.compose ? composerRef : undefined}>
           {v.comments.map((c) => (
             <CommentView key={c.id} comment={c} hunks={file.hunks} />
           ))}
           {v.compose && compose && (
+            <>
+            <p className="loc">Comment on {locationLabel(compose, file.hunks)}</p>
             <CommentForm
               submitLabel="Add comment"
               onCancel={() => setCompose(undefined)}
               onSubmit={(tags, body) => {
-                const snippet = compose.end
+                const snippet = compose.lines ? makeLinkedSnippet(file.hunks, compose.lines) : compose.end
                   ? makeRangeSnippet(file.hunks, compose, compose.end)
                   : makeSnippet(file.hunks, compose.side, compose.lineNumber)
                 if (!snippet) throw new Error('Those lines are no longer in this diff.')
@@ -136,6 +176,7 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
                 setCompose(undefined)
               }}
             />
+            </>
           )}
         </div>,
       ]),
@@ -143,21 +184,13 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
   }, [mine, compose, file, candidateId, addComment])
 
   const tokens = useMemo(() => {
+    const hunks = toDiffHunks(file.raw.hunks)
     const ranges = getSearchRanges(file.hunks, query)
-    const enhancers = []
+    const enhancers = [markEdits(hunks, { type: 'block' })]
     if (query.trim()) enhancers.push(pickRanges(ranges.oldRanges.map((r) => ({ ...r, type: 'search-result' })), ranges.newRanges.map((r) => ({ ...r, type: 'search-result' }))))
-    if (selectedText) {
-      const selectionRanges = getSearchRanges(file.hunks, selectedText)
-      enhancers.push(pickRanges(selectionRanges.oldRanges.map((r) => ({ ...r, type: 'selected-text' })), selectionRanges.newRanges.map((r) => ({ ...r, type: 'selected-text' }))))
-    }
-    if (hoveredWord) {
-      const wordRanges = getTokenRanges(file.hunks, hoveredWord)
-      enhancers.push(pickRanges(wordRanges.oldRanges.map((r) => ({ ...r, type: 'hover-word' })), wordRanges.newRanges.map((r) => ({ ...r, type: 'hover-word' }))))
-    }
     const language = languageFor(file.path)
-    // SAFETY: parser hunks share the line/change shape consumed by react-diff-view's tokenizer.
-    return tokenize(file.raw.hunks as unknown as HunkData[], language ? { highlight: true, refractor, language, enhancers } : { enhancers })
-  }, [file, query, hoveredWord, selectedText])
+    return tokenize(hunks, language ? { highlight: true, refractor, language, enhancers } : { enhancers })
+  }, [file, query])
 
   const selected = useMemo(() => {
     const keys = new Set<string>()
@@ -165,11 +198,13 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
       const ch = end ? rangeChanges(file.hunks, start, end) : [changeAt(file.hunks, start.side, start.lineNumber)]
       ch?.forEach((c) => c && keys.add(getChangeKey(c as ChangeData)))
     }
-    mine.forEach((c) => c.end && c.side && c.lineNumber !== undefined && add({ side: c.side, lineNumber: c.lineNumber }, c.end))
-    if (compose) add(compose, compose.end)
+    mine.forEach((c) => c.lines ? c.lines.forEach((p) => add(p)) : c.end && c.side && c.lineNumber !== undefined && add({ side: c.side, lineNumber: c.lineNumber }, c.end))
+    if (compose?.lines) compose.lines.forEach((p) => add(p))
+    else if (compose) add(compose, compose.end)
+    linked.forEach((p) => add(p))
     if (pending) add(pending)
     return [...keys]
-  }, [mine, compose, pending, file.hunks])
+  }, [mine, compose, pending, linked, file.hunks])
 
   return (
     <section className="file">
@@ -191,10 +226,46 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
         {matchCount > 0 && <span className="badge search-count">{matchCount} match{matchCount === 1 ? '' : 'es'}</span>}
         {badge(file) && <span className="badge">{badge(file)}</span>}
         {mine.length > 0 && <span className="badge">{mine.length} comment{mine.length > 1 ? 's' : ''}</span>}
+        {!file.isBinary && file.hunks.length > 0 && <button type="button" className="secondary" aria-pressed={linking} onClick={() => {
+          if (linking) cancelLinks()
+          else {
+            setPending(undefined)
+            setCompose(undefined)
+            setLinking(true)
+            setOpen(true)
+          }
+        }}>Link lines</button>}
         <button type="button" className="secondary" onClick={() => setFileForm(true)}>
           Comment on file
         </button>
       </div>
+      {linking && <div className="widget linked-selection">
+        <p className="help">Click line numbers to select or remove separate lines in this file. Or enter comma-separated line numbers below; prefix removed lines with −. Esc cancels.</p>
+        <form className="row" onSubmit={(event) => {
+          event.preventDefault()
+          const values = lineInput.split(',').map((value) => value.trim())
+          const positions = values.map((value): Pos => ({ side: value.startsWith('-') || value.startsWith('−') ? 'old' : 'new', lineNumber: Number(value.replace(/^[-−]/, '')) }))
+          if (values.some((value) => !/^[-−]?[1-9]\d*$/.test(value)) || positions.some((p) => !locate(file.hunks, p.side, p.lineNumber))) {
+            setNotice('Enter line numbers present in this diff, such as 1,5,11 or -3,5.')
+            return
+          }
+          setLinked(linkedPositions(file.hunks, positions))
+          setNotice('')
+        }}>
+          <label>Lines to link <input aria-label={`Lines to link in ${file.path}`} value={lineInput} placeholder="1,5,11" onChange={(event) => setLineInput(event.target.value)} /></label>
+          <button type="submit" className="secondary">Select lines</button>
+        </form>
+        <p role="status">{linked.length ? `Selected lines: ${locationLabel({ ...linked[0], lines: linked }, file.hunks)}` : 'No lines selected.'}</p>
+        <div className="row">
+          <button type="button" disabled={!linked.length} onClick={() => {
+            setCompose({ ...linked[0], lines: linked })
+            cancelLinks()
+            setOpen(true)
+          }}>Comment on selected lines</button>
+          <button type="button" className="secondary" onClick={cancelLinks}>Cancel selection</button>
+        </div>
+      </div>}
+      {notice && <p className="error pad" role="alert">{notice}</p>}
       {(wholeFile.length > 0 || fileForm) && (
         <div className="widget">
           {wholeFile.map((c) => (
@@ -219,12 +290,10 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
           <p className="muted pad">No content changes.</p>
         ) : (
           <div className="diff-scroll" onMouseMove={(event) => {
-            const position = event.currentTarget.ownerDocument.caretPositionFromPoint(event.clientX, event.clientY)
-            const node = position?.offsetNode
-            onHoverWord(node?.nodeType === Node.TEXT_NODE ? tokenAt(node.textContent ?? '', position?.offset ?? -1) : undefined)
+            const point = codePointAt(event.currentTarget.ownerDocument, event.clientX, event.clientY)
+            onHoverWord(point && event.currentTarget.contains(point.cell) ? tokenAt(point.cell.textContent ?? '', point.offset) : undefined)
           }} onMouseLeave={() => onHoverWord(undefined)}>
             {pending && <p className="muted pad">Range start set. Click another line in the same hunk to finish, the same line for a single-line comment, Esc to cancel.</p>}
-            {notice && <p className="error pad" role="alert">{notice}</p>}
             <Diff
               viewType={viewType}
               diffType={diffType}
@@ -232,7 +301,7 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
               widgets={widgets}
               selectedChanges={selected}
               tokens={tokens}
-              renderToken={(token: TokenNode, renderDefault, index) => token.type === 'search-result' ? <mark key={index} className="diff-search-match">{token.children?.map((child, i) => renderDefault(child, i)) ?? token.value}</mark> : token.type === 'selected-text' ? <mark key={index} className="diff-selection-match">{token.children?.map((child, i) => renderDefault(child, i)) ?? token.value}</mark> : token.type === 'hover-word' ? <span key={index} className="diff-code-hover-word">{token.children?.map((child, i) => renderDefault(child, i)) ?? token.value}</span> : renderDefault(token, index)}
+              renderToken={(token: TokenNode, renderDefault, index) => token.type === 'search-result' ? <mark key={index} className="diff-search-match">{token.children?.map((child, i) => renderDefault(child, i)) ?? token.value}</mark> : renderDefault(token, index)}
               gutterEvents={{
                 onClick: ({ change, side }) => change && onGutterClick(lineOf(change, side)),
               }}

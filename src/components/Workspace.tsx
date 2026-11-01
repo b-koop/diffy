@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { createHoverWordDelay } from '../lib/hoverWordDelay'
 import { useStore } from '../store'
@@ -7,6 +7,7 @@ import { CandidateTabs } from './CandidateTabs'
 import { DiffView } from './DiffView'
 import { NotesModal } from './NotesModal'
 import { exportProblem } from './util'
+import { clearCodeHighlights, paintCodeHighlights, readCodeSelection, selectCodeIdentifier } from '../lib/codeSelection'
 import { categories, tagLabel } from '../lib/categories'
 
 export function Workspace({ id }: { id: string }) {
@@ -21,19 +22,35 @@ export function Workspace({ id }: { id: string }) {
   const [query, setQuery] = useState('')
   const [hoveredWord, setHoveredWord] = useState<string>()
   const [selectedText, setSelectedText] = useState<string>()
+  const workspaceRef = useRef<HTMLDivElement>(null)
   const hoverWordDelay = useMemo(() => createHoverWordDelay(setHoveredWord), [])
   useEffect(() => () => hoverWordDelay.dispose(), [hoverWordDelay])
   useEffect(() => {
-    const updateSelection = () => {
-      const selection = document.getSelection()
-      const range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
-      const container = range?.commonAncestorContainer
-      const selectionRoot = container instanceof Element ? container : container?.parentElement
-      setSelectedText(selectionRoot?.closest('.diff-scroll') ? selection?.toString().trim() || undefined : undefined)
+    const root = workspaceRef.current
+    if (!root) return
+    let frame = 0
+    const repaint = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => paintCodeHighlights(root, selectedText, hoveredWord))
     }
-    document.addEventListener('selectionchange', updateSelection)
-    return () => document.removeEventListener('selectionchange', updateSelection)
-  }, [])
+    const updateSelection = () => setSelectedText(readCodeSelection(root.ownerDocument.getSelection(), root))
+    const doubleClick = (event: MouseEvent) => {
+      selectCodeIdentifier(event, root)
+      updateSelection()
+    }
+    const observer = new MutationObserver(repaint)
+    observer.observe(root, { childList: true, subtree: true })
+    root.ownerDocument.addEventListener('selectionchange', updateSelection)
+    root.addEventListener('dblclick', doubleClick)
+    repaint()
+    return () => {
+      observer.disconnect()
+      root.ownerDocument.removeEventListener('selectionchange', updateSelection)
+      root.removeEventListener('dblclick', doubleClick)
+      cancelAnimationFrame(frame)
+      clearCodeHighlights()
+    }
+  }, [selectedText, hoveredWord])
   const customTags = useStore((s) => s.customTags)
 
   if (!problem) {
@@ -57,7 +74,7 @@ export function Workspace({ id }: { id: string }) {
   )
 
   return (
-    <div className="workspace">
+    <div className="workspace" ref={workspaceRef}>
       <AskPanel problem={problem} />
       <main>
         <header className="bar">
@@ -95,20 +112,20 @@ export function Workspace({ id }: { id: string }) {
           </div>
         )}
         {notesOpen && <NotesModal problem={problem} onClose={() => setNotesOpen(false)} />}
-        {first && <p className="muted hint">Click a line number to start a comment range, then click another line in the same hunk to end it. Click the start line again for a single-line comment; Esc cancels.</p>}
+        {first && <p className="muted hint">Click two line numbers in one hunk for a range, or click the same number twice for one line. Use “Link lines” in a file header to select separate lines such as 1,5,11. Esc cancels a selection.</p>}
         {first && compare && second ? (
           <div className="compare">
             <div>
               {picker(first.id, setSelected, 'Left candidate')}
-              <DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} hoveredWord={hoveredWord} selectedText={selectedText} onHoverWord={hoverWordDelay.setHoveredWord} />
+              <DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} onHoverWord={hoverWordDelay.setHoveredWord} />
             </div>
             <div>
               {picker(second.id, setSecondId, 'Right candidate')}
-              <DiffView key={second.id} candidate={second} viewType={viewType} openAll={openAll} query={query} hoveredWord={hoveredWord} selectedText={selectedText} onHoverWord={hoverWordDelay.setHoveredWord} />
+              <DiffView key={second.id} candidate={second} viewType={viewType} openAll={openAll} query={query} onHoverWord={hoverWordDelay.setHoveredWord} />
             </div>
           </div>
         ) : (
-          first && <DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} hoveredWord={hoveredWord} selectedText={selectedText} onHoverWord={hoverWordDelay.setHoveredWord} />
+          first && <DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} onHoverWord={hoverWordDelay.setHoveredWord} />
         )}
         <section className="tag-guide" aria-labelledby="tag-guide-title">
           <h2 id="tag-guide-title">Available tags</h2>

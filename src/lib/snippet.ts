@@ -45,3 +45,24 @@ export function makeRangeSnippet(hunks: Hunk[], start: Pos, end: Pos): string {
   const r = rangeChanges(hunks, start, end)
   return r ? render(r) : ''
 }
+
+/** Unique selected rows in diff order; context rows always use their new-side address. */
+export function linkedPositions(hunks: Hunk[], lines: Pos[]): Pos[] {
+  const selected = new Set(lines.map((p) => locate(hunks, p.side, p.lineNumber)?.change).filter(Boolean))
+  return hunks.flatMap((h) => h.changes.filter((c) => selected.has(c)).map((c): Pos =>
+    c.type === 'normal' ? { side: 'new', lineNumber: c.newLineNumber }
+      : { side: c.type === 'delete' ? 'old' : 'new', lineNumber: c.lineNumber }))
+}
+
+/** Only selected rows, with an explicit separator wherever diff rows were skipped. */
+export function makeLinkedSnippet(hunks: Hunk[], lines: Pos[]): string {
+  if (!lines.length || lines.some((p) => !locate(hunks, p.side, p.lineNumber))) return ''
+  const ordered = linkedPositions(hunks, lines)
+  let previous: ReturnType<typeof locate>
+  return ordered.map((p) => {
+    const row = locate(hunks, p.side, p.lineNumber)!
+    const gap = previous && (previous.hunk !== row.hunk || row.index !== previous.index + 1) ? '…\n' : ''
+    previous = row
+    return gap + render([row.change])
+  }).join('\n')
+}

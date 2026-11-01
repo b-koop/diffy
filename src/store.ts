@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { del, get, set } from 'idb-keyval'
 import { isBuiltIn, resolveTag } from './lib/categories'
 import { nextCandidateLabel } from './lib/candidateLabel'
-import { isPos, type ProblemFile } from './lib/problemFile'
+import { isLinkedAnchor, isPos, type ProblemFile } from './lib/problemFile'
 import type { Pos, Side } from './lib/snippet'
 
 export interface Candidate {
@@ -30,6 +30,8 @@ export interface Comment {
   lineNumber?: number
   /** Range end (side/lineNumber above are the start). Absent for a single-line or whole-file comment. */
   end?: Pos
+  /** Noncontiguous selected rows, including the primary anchor; mutually exclusive with end. */
+  lines?: Pos[]
   snippet?: string
   /** Built-in category slugs and/or custom tag strings. At least one. */
   tags: string[]
@@ -47,6 +49,7 @@ export interface NewComment {
   side?: Side
   lineNumber?: number
   end?: Pos
+  lines?: Pos[]
   snippet?: string
   tags: string[]
   body: string
@@ -100,7 +103,8 @@ function normalizeTags(tags: string[], known: string[]): string[] {
 }
 
 /** Either fully line-anchored (side + lineNumber + snippet, optional end) or whole-file (none of them). */
-function validateAnchor(c: { side?: Side; lineNumber?: number; end?: Pos; snippet?: string }) {
+function validateAnchor(c: { side?: Side; lineNumber?: number; end?: Pos; lines?: Pos[]; snippet?: string }) {
+  if (!isLinkedAnchor(c)) throw new Error('Linked lines need unique positive line numbers, their primary anchor, and no range end.')
   const set = [c.side, c.lineNumber, c.snippet].filter((v) => v !== undefined).length
   if (set === 0) {
     if (c.end !== undefined) throw new Error('A whole-file comment cannot have a range end.')

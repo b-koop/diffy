@@ -7,7 +7,7 @@ import { CommentForm } from './CommentForm'
 import { Chips, DeniedBadge, Snippet, StatusToggle } from './CommentView'
 import { NotesModal } from './NotesModal'
 
-function ReviewRow({ comment, location }: { comment: Comment; location: string }) {
+function ReviewRow({ comment, location, codeVisible, onToggleCode }: { comment: Comment; location: string; codeVisible: boolean; onToggleCode(): void }) {
   const editComment = useStore((s) => s.editComment)
   const deleteComment = useStore((s) => s.deleteComment)
   const [editing, setEditing] = useState(false)
@@ -33,7 +33,16 @@ function ReviewRow({ comment, location }: { comment: Comment; location: string }
     <li className={isDenied(comment) ? 'comment denied' : 'comment'}>
       <div className="muted loc">{comment.file}[{location}]{isDenied(comment) && <> <DeniedBadge /></>}</div>
       <Chips tags={comment.tags} />
-      {comment.snippet && <Snippet text={comment.snippet} />}
+      {comment.snippet && (
+        <>
+          <div className="row">
+            <button type="button" className="link" aria-expanded={codeVisible} aria-controls={`review-code-${comment.id}`} onClick={onToggleCode}>
+              {codeVisible ? 'Hide code' : 'Show code'}
+            </button>
+          </div>
+          <div id={`review-code-${comment.id}`} hidden={!codeVisible}><Snippet text={comment.snippet} /></div>
+        </>
+      )}
       {comment.body && <p className="body">{comment.body}</p>}
       <div className="row">
         <StatusToggle comment={comment} />
@@ -57,6 +66,7 @@ export function Review({ id }: { id: string }) {
   const comments = useStore((s) => s.comments)
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [notesOpen, setNotesOpen] = useState(false)
+  const [hiddenCode, setHiddenCode] = useState<Set<string>>(() => new Set())
 
   const groups = useMemo(() => (problem ? buildReview(problem, comments, filter) : []), [problem, comments, filter])
   if (!problem) return <main><p>Review not found.</p><a href="#/">Back to reviews</a></main>
@@ -78,6 +88,8 @@ export function Review({ id }: { id: string }) {
           </select>
         </label>
         <span className="muted" data-testid="review-counts">{countsLine(reviewCounts(problem, comments))}</span>
+        <button type="button" className="secondary" onClick={() => setHiddenCode(new Set(comments.filter((comment) => problem.candidates.some((candidate) => candidate.id === comment.candidateId) && comment.snippet).map((comment) => comment.id)))}>Hide all code</button>
+        <button type="button" className="secondary" onClick={() => setHiddenCode(new Set())}>Show all code</button>
         <button type="button" className="primary-big" onClick={() => setNotesOpen(true)}>Output notes</button>
       </div>
       {groups.every((g) => g.items.length === 0) && <p className="muted">No comments{filter === 'all' ? '' : ` that are ${filter}`}.</p>}
@@ -85,7 +97,12 @@ export function Review({ id }: { id: string }) {
         <section key={g.candidateId}>
           <h2>{g.label}</h2>
           <ul className="review-list">
-            {g.items.map((i) => <ReviewRow key={i.comment.id} comment={i.comment} location={i.location} />)}
+            {g.items.map((i) => <ReviewRow key={i.comment.id} comment={i.comment} location={i.location} codeVisible={!hiddenCode.has(i.comment.id)} onToggleCode={() => setHiddenCode((current) => {
+              const next = new Set(current)
+              if (next.has(i.comment.id)) next.delete(i.comment.id)
+              else next.add(i.comment.id)
+              return next
+            })} />)}
           </ul>
         </section>
       ))}

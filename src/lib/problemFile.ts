@@ -17,6 +17,12 @@ const isStrArr = (v: unknown): v is string[] => Array.isArray(v) && v.every(isSt
 const arrOf = <T,>(v: unknown, ok: (x: unknown) => x is T): v is T[] => Array.isArray(v) && v.every(ok)
 
 export const isPos = (v: unknown): v is Pos => isObj(v) && (v.side === 'old' || v.side === 'new') && isNum(v.lineNumber)
+/** Linked selections contain their primary anchor once and cannot also describe a range. */
+export const isLinkedAnchor = (v: { lines?: unknown; side?: unknown; lineNumber?: unknown; end?: unknown }): boolean =>
+  v.lines === undefined || (v.end === undefined && Array.isArray(v.lines) && v.lines.length > 0 &&
+    v.lines.every((p) => isPos(p) && Number.isInteger(p.lineNumber) && p.lineNumber > 0) &&
+    new Set(v.lines.map((p: Pos) => `${p.side}:${p.lineNumber}`)).size === v.lines.length &&
+    v.lines.some((p: Pos) => p.side === v.side && p.lineNumber === v.lineNumber))
 const isCandidate = (v: unknown): v is Candidate =>
   isObj(v) && isStr(v.id) && isStr(v.label) && isStr(v.rawDiff) && (v.note === undefined || isStr(v.note))
 const isProblem = (v: unknown): v is Problem =>
@@ -26,6 +32,7 @@ const isComment = (v: unknown): v is Comment =>
   isStr(v.id) &&
   isStr(v.candidateId) &&
   isStr(v.file) &&
+  isLinkedAnchor(v) &&
   (v.side === undefined && v.lineNumber === undefined && v.snippet === undefined && v.end === undefined
     ? true
     : (v.side === 'old' || v.side === 'new') &&
