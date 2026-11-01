@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changeAt, lineOf, resolveClick } from './util'
+import { changeAt, lineOf, resolveClick, selectCommentLines } from './util'
 import type { Hunk } from '../lib/parseDiff'
 
 const hunk = {
@@ -52,5 +52,21 @@ describe('resolveClick', () => {
   })
   it('rejects a click in another hunk', () => {
     expect(resolveClick(hunks, ctx, { side: 'new', lineNumber: 50 })).toEqual({ kind: 'cross' })
+  })
+})
+
+
+describe("comment line selection", () => {
+  const first = { side: "new", lineNumber: 5 } as const
+  const last = { side: "new", lineNumber: 6 } as const
+  it("selects one line until a range is explicitly extended", { tags: ["important", "reporting"] }, () => {
+    expect(selectCommentLines([hunk], undefined, first, false)).toEqual({ start: first })
+    expect(selectCommentLines([hunk], { start: first }, last, false)).toEqual({ start: last })
+    expect(selectCommentLines([hunk], { start: first }, last, true)).toEqual({ start: first, end: last })
+  })
+  it("orders backward ranges and rejects ranges across omitted lines", { tags: ["validation", "reporting"] }, () => {
+    expect(selectCommentLines([hunk], { start: last }, first, true)).toEqual({ start: first, end: last })
+    const second = { changes: [{ type: "insert", lineNumber: 50, content: "later" }] } as unknown as Hunk
+    expect(selectCommentLines([hunk, second], { start: first }, { side: "new", lineNumber: 50 }, true)).toBeUndefined()
   })
 })

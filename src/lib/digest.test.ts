@@ -86,9 +86,9 @@ describe('line locations', () => {
   }
   const whole: Comment = { ...cm('w', 'c1', 'a.ts', ['unclear_code']), side: undefined, lineNumber: undefined, snippet: undefined }
 
-  it('gives every digest comment a location, whole-file first', () => {
+  it('gives every digest comment a location, whole-file first', { tags: ['reporting'] }, () => {
     const d = buildDigest(ranged, [single, range, whole])
-    expect(d[0].cells[0].comments.map((c) => c.location)).toEqual(['all', '5-7', '6'])
+    expect(d[0].cells[0].comments.map((c) => c.location)).toEqual(['all', '5,-6,+6,7', '6'])
   })
 })
 

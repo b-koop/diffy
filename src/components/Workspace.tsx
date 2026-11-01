@@ -112,7 +112,7 @@ export function Workspace({ id }: { id: string }) {
           </div>
         )}
         {notesOpen && <NotesModal problem={problem} onClose={() => setNotesOpen(false)} />}
-        {first && <p className="muted hint">Click two line numbers in one hunk for a range, or click the same number twice for one line. Use “Link lines” in a file header to select separate lines such as 1,5,11. Esc cancels a selection.</p>}
+        {first && <p className="muted hint">Hover a line and click + to comment. Drag + across lines, or click a line number then Shift-click another to select a range. Use “Link lines” for separate lines such as 1,5,11. Esc cancels selection.</p>}
         {first && compare && second ? (
           <div className="compare">
             <div>

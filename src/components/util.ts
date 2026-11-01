@@ -61,3 +61,13 @@ export function resolveClick(hunks: Hunk[], pending: Pos | undefined, clicked: P
   if (a.index === b.index) return { kind: 'single', start: pending }
   return a.index < b.index ? { kind: 'range', start: pending, end: clicked } : { kind: 'range', start: clicked, end: pending }
 }
+
+export interface CommentLineSelection { start: Pos; end?: Pos }
+
+/** A normal click starts a selection; an explicit extension stays inside one hunk. */
+export function selectCommentLines(hunks: Hunk[], selection: CommentLineSelection | undefined, clicked: Pos, extend: boolean): CommentLineSelection | undefined {
+  if (!extend || !selection) return { start: clicked }
+  const range = resolveClick(hunks, selection.start, clicked)
+  if (range.kind === "cross") return undefined
+  return range.kind === "range" ? { start: range.start, end: range.end } : { start: range.start }
+}

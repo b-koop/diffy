@@ -35,7 +35,7 @@ describe('linked line comments', () => {
   it('orders selections by diff position and treats both gutters of a context line as one line', { tags: ['reporting'] }, () => {
     const picked: Pos[] = [lines[2], { side: 'old', lineNumber: 1 }, lines[1], lines[0]]
     expect(linkedPositions(hunks, picked)).toEqual(lines)
-    expect(locationLabel({ ...lines[0], lines: [{ side: 'new', lineNumber: 3 }, { side: 'old', lineNumber: 3 }] }, hunks)).toBe('-3,3')
+    expect(locationLabel({ ...lines[0], lines: [{ side: 'new', lineNumber: 3 }, { side: 'old', lineNumber: 3 }] }, hunks)).toBe('-3,+3')
     expect(makeLinkedSnippet(hunks, [{ side: 'new', lineNumber: 99 }])).toBe('')
   })
 
@@ -48,6 +48,17 @@ describe('linked line comments', () => {
     const exported = serializeProblem(current, state().comments, [])
     const imported = state().importProblem(parseProblemFile(exported))
     expect(state().comments.find((comment) => comment.candidateId === imported.candidates[0].id)?.lines).toEqual(lines)
+  })
+
+  it('keeps both removed and inserted addresses in output after exporting and importing', { tags: ['reporting', 'persistence', 'imports', 'exports'] }, () => {
+    const problem = state().addProblem({ title: 'Review' })
+    const candidate = state().addCandidate(problem.id, { label: 'A', rawDiff })
+    const mixed: Pos[] = [{ side: 'old', lineNumber: 3 }, { side: 'new', lineNumber: 3 }]
+    state().addComment({ candidateId: candidate.id, file: 'a.ts', ...mixed[0], lines: mixed, snippet: makeLinkedSnippet(hunks, mixed), tags: ['unclear_code'], body: 'Replacement issue' })
+    const exported = serializeProblem(state().problems[0], state().comments, [])
+    const imported = state().importProblem(parseProblemFile(exported))
+    expect(outputNotes(imported, state().comments)).toContain('a.ts[-3,+3]: Replacement issue')
+    expect(state().comments.find((comment) => comment.candidateId === imported.candidates[0].id)?.lines).toEqual(mixed)
   })
 
   it('rejects empty, duplicate, invalid, and conflicting linked anchors when saving or importing', { tags: ['validation', 'imports'] }, () => {
