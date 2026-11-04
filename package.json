@@ -12,17 +12,26 @@
     "deploy": "vite build && wrangler deploy"
   },
   "dependencies": {
+    "@scalar/rust-fmt": "^0.3.0",
+    "@scalar/swift-fmt": "^0.3.0",
+    "@wasm-fmt/clang-format": "^23.1.1",
+    "@wasm-fmt/gofmt": "^0.7.3",
+    "@wasm-fmt/ruff_fmt": "^0.15.20",
+    "@wasm-fmt/shfmt": "^0.2.7",
     "gitdiff-parser": "^0.3.1",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^1.61.0",
+    "prettier": "^3.9.10",
     "react": "^19.3.1",
     "react-diff-view": "^3.3.3",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
     "refractor": "^3.6.0",
+    "sql-formatter": "^15.9.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

@@ -1,4 +1,4 @@
-export function createHoverWordDelay(onHoverWord: (word?: string) => void, delay = 5000) {
+export function createHoverWordDelay(onHoverWord: (word?: string) => void, delay = 2000) {
   let pendingWord: string | undefined
   let activeWord: string | undefined
   let timer: ReturnType<typeof setTimeout> | undefined

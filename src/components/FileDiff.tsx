@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { ChevronDown, ChevronRight, Copy, Plus } from 'lucide-react'
 import { Diff, Hunk, getChangeKey, markEdits, pickRanges, tokenize, type ChangeData, type HunkData, type TokenNode } from 'react-diff-view'
 import refractor from 'refractor/core'
+import c from 'refractor/lang/c.js'
+import cpp from 'refractor/lang/cpp.js'
+import java from 'refractor/lang/java.js'
+import swift from 'refractor/lang/swift.js'
 import bash from 'refractor/lang/bash.js'
 import css from 'refractor/lang/css.js'
 import go from 'refractor/lang/go.js'
@@ -25,7 +29,7 @@ import { codePointAt } from '../lib/codeSelection'
 import { copyTextToClipboard } from '../lib/clipboard'
 import { locationLabel } from '../lib/location'
 
-for (const grammar of [bash, css, go, json, jsx, markup, python, rust, sql, tsx, yaml]) refractor.register(grammar)
+for (const grammar of [bash, c, cpp, css, go, java, json, jsx, markup, python, rust, sql, swift, tsx, yaml]) refractor.register(grammar)
 
 interface Props {
   file: DiffFile
@@ -46,7 +50,9 @@ const toDiffHunks = (hunks: DiffFile['raw']['hunks']): HunkData[] => {
 }
 
 const languageFor = (path: string) => ({
-  ts: 'tsx', tsx: 'tsx', js: 'jsx', jsx: 'jsx', py: 'python', go: 'go', rs: 'rust',
+  ts: 'tsx', tsx: 'tsx', js: 'jsx', jsx: 'jsx', mjs: 'jsx', mjx: 'jsx', py: 'python', go: 'go', rs: 'rust',
+  c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp', hxx: 'cpp',
+  java: 'java', swift: 'swift',
   css: 'css', html: 'markup', xml: 'markup', svg: 'markup', json: 'json', yaml: 'yaml',
   yml: 'yaml', sh: 'bash', sql: 'sql',
 } as Record<string, string>)[path.split('.').pop()?.toLowerCase() ?? '']

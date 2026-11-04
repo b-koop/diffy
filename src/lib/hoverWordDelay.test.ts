@@ -4,13 +4,13 @@ import { createHoverWordDelay } from './hoverWordDelay'
 describe('diff word highlighting', () => {
   afterEach(() => vi.useRealTimers())
 
-  it('highlights a word only after the pointer stays on it for five seconds', () => {
+  it('highlights a word only after the pointer stays on it for two seconds', () => {
     vi.useFakeTimers()
     const onHoverWord = vi.fn()
     const { setHoveredWord } = createHoverWordDelay(onHoverWord)
 
     setHoveredWord('review')
-    vi.advanceTimersByTime(4999)
+    vi.advanceTimersByTime(1999)
     expect(onHoverWord).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(1)
@@ -23,9 +23,9 @@ describe('diff word highlighting', () => {
     const { setHoveredWord } = createHoverWordDelay(onHoverWord)
 
     setHoveredWord('first')
-    vi.advanceTimersByTime(3000)
+    vi.advanceTimersByTime(1000)
     setHoveredWord('second')
-    vi.advanceTimersByTime(4999)
+    vi.advanceTimersByTime(1999)
     expect(onHoverWord).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(1)
@@ -38,9 +38,9 @@ describe('diff word highlighting', () => {
     const { setHoveredWord } = createHoverWordDelay(onHoverWord)
 
     setHoveredWord('review')
-    vi.advanceTimersByTime(3000)
+    vi.advanceTimersByTime(1000)
     setHoveredWord(undefined)
-    vi.advanceTimersByTime(5000)
+    vi.advanceTimersByTime(2000)
 
     expect(onHoverWord).not.toHaveBeenCalled()
   })
