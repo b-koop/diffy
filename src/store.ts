@@ -5,11 +5,13 @@ import { isBuiltIn, resolveTag } from './lib/categories'
 import { nextCandidateLabel } from './lib/candidateLabel'
 import { isLinkedAnchor, isPos, type ProblemFile } from './lib/problemFile'
 import type { Pos, Side } from './lib/snippet'
+import { isFindingDecision, type Finding, type FindingAnswer, type FindingBatch } from './lib/findings'
 
 export interface Candidate {
   id: string
   label: string
   rawDiff: string
+  findingBatches?: FindingBatch[]
   /** Free-text overall note for this candidate. */
   note?: string
 }
@@ -67,11 +69,14 @@ interface Actions {
   deleteProblem(id: string): void
   addCandidate(problemId: string, input: { label: string; rawDiff: string }): Candidate
   editCandidate(problemId: string, candidateId: string, patch: Partial<Pick<Candidate, 'label' | 'rawDiff' | 'note'>>): void
+  addFindingBatch(problemId: string, candidateId: string, batch: Omit<FindingBatch, 'id'>): FindingBatch
+  editFinding(problemId: string, candidateId: string, findingId: string, patch: Partial<Pick<Finding, 'sourceNumber' | 'title' | 'claim' | 'evidence' | 'proposedFix' | 'findingAnswer' | 'fixAnswer'>>): void
+  deleteFindingBatch(problemId: string, candidateId: string, batchId: string): void
   deleteCandidate(problemId: string, candidateId: string): void
   /** Throws if tags are empty or a body is missing when required. */
   addComment(input: NewComment): Comment
   /** Throws on the same validation as addComment. */
-  editComment(id: string, patch: Partial<Pick<Comment, 'tags' | 'body' | 'end'>>): void
+  editComment(id: string, patch: Partial<Pick<Comment, 'tags' | 'body' | 'side' | 'lineNumber' | 'end' | 'lines' | 'snippet'>>): void
   deleteComment(id: string): void
   setCommentStatus(id: string, status: CommentStatus): void
   addCustomTag(tag: string): void
@@ -212,12 +217,26 @@ export const useStore = create<Store>()(
                 if (p.id !== problemId) return p
                 return {
                   ...p,
-                  candidates: p.candidates.map((c) => c.id === candidateId ? { ...c, ...patch } : c),
+                  candidates: p.candidates.map((c) => c.id === candidateId ? { ...c, ...patch, ...(replacesDiff ? { findingBatches: undefined } : {}) } : c),
                 }
               }),
               ...(replacesDiff && { comments: s.comments.filter((c) => c.candidateId !== candidateId) }),
             }
           }),
+        addFindingBatch: (problemId, candidateId, batch) => {
+          const candidate = getState().problems.find((p) => p.id === problemId)?.candidates.find((c) => c.id === candidateId)
+          if (!candidate) throw new Error('The patch is no longer available.')
+          const stored: FindingBatch = { ...batch, id: uid(), findings: batch.findings.map((f) => ({ ...f, id: uid() })) }
+          patchProblem(problemId, (p) => ({ ...p, candidates: p.candidates.map((c) => c.id === candidateId ? { ...c, findingBatches: [...(c.findingBatches ?? []), stored] } : c) }))
+          return stored
+        },
+        editFinding: (problemId, candidateId, findingId, patch) => {
+          for (const answer of [patch.findingAnswer, patch.fixAnswer]) if (answer && (!isFindingDecision(answer.decision) || typeof answer.text !== 'string')) throw new Error('Finding answer is invalid.')
+          for (const key of ['sourceNumber', 'title', 'claim', 'evidence', 'proposedFix'] as const) if (patch[key] !== undefined && typeof patch[key] !== 'string') throw new Error('Finding fields must be text.')
+          patchProblem(problemId, (p) => ({ ...p, candidates: p.candidates.map((c) => c.id !== candidateId ? c : { ...c, findingBatches: (c.findingBatches ?? []).map((b) => ({ ...b, findings: b.findings.map((f) => f.id === findingId ? { ...f, ...patch } : f) })) }) }))
+        },
+        deleteFindingBatch: (problemId, candidateId, batchId) =>
+          patchProblem(problemId, (p) => ({ ...p, candidates: p.candidates.map((c) => c.id === candidateId ? { ...c, findingBatches: (c.findingBatches ?? []).filter((b) => b.id !== batchId) } : c) })),
         deleteCandidate: (problemId, candidateId) => {
           patchProblem(problemId, (p) => ({ ...p, candidates: p.candidates.filter((c) => c.id !== candidateId) }))
           setState((s) => ({ comments: s.comments.filter((c) => c.candidateId !== candidateId) }))
@@ -258,7 +277,7 @@ export const useStore = create<Store>()(
           const problem: Problem = {
             ...file.problem,
             id: uid(),
-            candidates: file.problem.candidates.map((c) => ({ ...c, id: ids.get(c.id)! })),
+            candidates: file.problem.candidates.map((c) => ({ ...c, id: ids.get(c.id)!, findingBatches: c.findingBatches?.map((b) => ({ ...b, id: uid(), findings: b.findings.map((f) => ({ ...f, id: uid() })) })) })),
           }
           const comments = file.comments.map((c) => ({ ...c, id: uid(), candidateId: ids.get(c.candidateId)! }))
           setState((s) => ({

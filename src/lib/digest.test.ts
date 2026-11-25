@@ -34,36 +34,59 @@ const comments = [
 ]
 
 describe('buildDigest', () => {
-  it('groups by file and marks files a candidate did not touch', () => {
+  it('groups by file and aligns exact locations with empty candidate cells', () => {
     const d = buildDigest(problem, comments)
-    expect(d.map((f) => f.file)).toEqual(['a.ts', 'b.ts'])
-    const a = d[0].cells
-    expect(a[0]).toMatchObject({ candidateId: 'c1', changed: true })
-    expect(a[0].comments.map((c) => c.id)).toEqual(['1', '3'])
-    expect(a[1]).toMatchObject({ candidateId: 'c2', changed: false, comments: [] })
-    expect(d[1].cells[0].changed).toBe(false)
-    expect(d[1].cells[1].changed).toBe(true)
+    expect(d.map((file) => file.file)).toEqual(['a.ts', 'b.ts'])
+    const a = d[0].rows
+    expect(a.map((row) => row.location)).toEqual(['1', '5'])
+    expect(a[0].cells[0]).toMatchObject({ candidateId: 'c1', changed: true, comments: [comments[0]] })
+    expect(a[0].cells[1]).toMatchObject({ candidateId: 'c2', changed: false, comments: [] })
+    expect(d[1].rows[0].cells[0].changed).toBe(false)
+    expect(d[1].rows[0].cells[1].changed).toBe(true)
   })
 
   it('filters by a built-in tag, matching comments that carry it among several', () => {
     const d = buildDigest(problem, comments, 'unclear_code')
-    expect(d.map((f) => f.file)).toEqual(['a.ts'])
-    expect(d[0].cells[0].comments.map((c) => c.id)).toEqual(['1'])
+    expect(d.map((file) => file.file)).toEqual(['a.ts'])
+    expect(d[0].rows[0].cells[0].comments.map((comment) => comment.id)).toEqual(['1'])
   })
 
   it('filters by a custom tag, case-insensitively', () => {
     const d = buildDigest(problem, comments, 'CSS LEAK')
-    expect(d[0].cells[0].comments.map((c) => c.id)).toEqual(['1'])
+    expect(d[0].rows[0].cells[0].comments.map((comment) => comment.id)).toEqual(['1'])
   })
 
   it('lists each comment once when filtering by one of several tags', () => {
     const d = buildDigest(problem, comments, 'too_many_branches')
-    const ids = d.flatMap((f) => f.cells.flatMap((c) => c.comments.map((x) => x.id)))
+    const ids = d.flatMap((file) => file.rows.flatMap((row) => row.cells.flatMap((cell) => cell.comments.map((comment) => comment.id))))
     expect(ids.sort()).toEqual(['2', '3'])
   })
 
   it('ignores comments for candidates outside the problem', () => {
     expect(buildDigest(problem, [cm('x', 'other', 'a.ts', ['unclear_code'])])).toEqual([])
+  })
+  it('sorts whole-file, numeric, signed and distinct selection locations without duplicating comments', () => {
+    const invalid: Problem = { ...problem, candidates: problem.candidates.map((candidate) => ({ ...candidate, rawDiff: 'invalid' })) }
+    const whole: Comment = { ...cm('whole', 'c1', 'f.ts', [], 1), side: undefined, lineNumber: undefined }
+    const removed: Comment = { ...cm('removed', 'c1', 'f.ts', [], 6), side: 'old', lineNumber: 6 }
+    const added = cm('added', 'c1', 'f.ts', [], 6)
+    const ranged = { ...cm('range', 'c1', 'f.ts', [], 2), end: { side: 'new' as const, lineNumber: 4 } }
+    const linked = { ...cm('linked', 'c1', 'f.ts', [], 2), lines: [{ side: 'new' as const, lineNumber: 2 }, { side: 'new' as const, lineNumber: 4 }] }
+    const same = cm('same', 'c2', 'f.ts', [], 10)
+    const d = buildDigest(invalid, [same, added, whole, removed, ranged, linked, cm('same2', 'c1', 'f.ts', [], 10)])
+    expect(d[0].rows.map((row) => row.location)).toEqual(['all', '2-4', '2,4', '-6', '6', '10'])
+    expect(d[0].rows[5].cells.map((cell) => cell.comments.map((comment) => comment.id))).toEqual([['same2'], ['same']])
+    expect(d[0].rows[0].cells[0].comments).toEqual([whole])
+  })
+
+  it('intersects tag and status filters, treats missing status as approved, and drops empty results', () => {
+    const approved = cm('approved', 'c1', 'a.ts', ['unclear_code'])
+    const explicit = { ...cm('explicit', 'c1', 'a.ts', ['unclear_code'], 5), status: 'approved' as const }
+    const denied: Comment = { ...cm('denied', 'c1', 'a.ts', ['unclear_code'], 7), status: 'denied' }
+    const result = buildDigest(problem, [approved, explicit, denied], 'unclear_code', 'approved')
+    expect(result[0].rows.flatMap((row) => row.cells.flatMap((cell) => cell.comments.map((comment) => comment.id)))).toEqual(['approved', 'explicit'])
+    expect(buildDigest(problem, [denied], 'too_many_branches', 'denied')).toEqual([])
+    expect(buildDigest(problem, [denied], undefined, 'approved')).toEqual([])
   })
 })
 
@@ -86,9 +109,9 @@ describe('line locations', () => {
   }
   const whole: Comment = { ...cm('w', 'c1', 'a.ts', ['unclear_code']), side: undefined, lineNumber: undefined, snippet: undefined }
 
-  it('gives every digest comment a location, whole-file first', { tags: ['reporting'] }, () => {
+  it('groups by resolved location with whole-file rows first and numeric ordering', () => {
     const d = buildDigest(ranged, [single, range, whole])
-    expect(d[0].cells[0].comments.map((c) => c.location)).toEqual(['all', '5,-6,+6,7', '6'])
+    expect(d[0].rows.map((row) => row.location)).toEqual(['all', '5,-6,+6,7', '6'])
   })
 })
 

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { tagLabel } from '../lib/categories'
 import { locationLabel } from '../lib/location'
+import { buildCommentAnchorPatch } from '../lib/commentAnchor'
 import type { Hunk } from '../lib/parseDiff'
 import { isDenied } from '../lib/digest'
-import { useStore, type Comment } from '../store'
+import { useStore } from '../store'
 import { CommentForm } from './CommentForm'
 
 export const Chips = ({ tags }: { tags: string[] }) => (
@@ -44,33 +45,35 @@ export function CommentView({ comment, hunks }: { comment: Comment; hunks: Hunk[
   const deleteComment = useStore((s) => s.deleteComment)
   const [editing, setEditing] = useState(false)
 
-  if (editing) {
-    return (
-      <CommentForm
-        initial={comment}
-        submitLabel="Save"
-        onSubmit={(tags, body) => {
-          editComment(comment.id, { tags, body })
-          setEditing(false)
-        }}
-        onCancel={() => setEditing(false)}
-      />
-    )
-  }
   return (
     <div className={isDenied(comment) ? 'comment denied' : 'comment'}>
       <div className="muted loc">{locationLabel(comment, hunks)}{isDenied(comment) && <> <DeniedBadge /></>}</div>
-      <Chips tags={comment.tags} />
-      {comment.body && <p className="body">{comment.body}</p>}
-      <div className="row">
-        <StatusToggle comment={comment} />
-        <button type="button" className="link" onClick={() => setEditing(true)}>
-          Edit
-        </button>
-        <button type="button" className="link" onClick={() => deleteComment(comment.id)}>
-          Delete
-        </button>
-      </div>
+      {editing ? <>
+        {comment.snippet && <Snippet text={comment.snippet} />}
+        <CommentForm
+          initial={comment}
+          anchor={comment.side !== undefined && comment.lineNumber !== undefined ? {
+            side: comment.side,
+            lineNumber: comment.lineNumber,
+            end: comment.end,
+            lines: comment.lines,
+          } : undefined}
+          submitLabel="Save"
+          onSubmit={(tags, body, anchor) => {
+            editComment(comment.id, { tags, body, ...(anchor ? buildCommentAnchorPatch(hunks, anchor) : {}) })
+            setEditing(false)
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </> : <>
+        <Chips tags={comment.tags} />
+        {comment.body && <p className="body">{comment.body}</p>}
+        <div className="row">
+          <StatusToggle comment={comment} />
+          <button type="button" className="link" onClick={() => setEditing(true)}>Edit</button>
+          <button type="button" className="link" onClick={() => deleteComment(comment.id)}>Delete</button>
+        </div>
+      </>}
     </div>
   )
 }

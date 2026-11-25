@@ -49,6 +49,7 @@ function AddCandidate({ problem, onAdded, onCancel }: { problem: Problem; onAdde
 
 function EditCandidate({ problem, candidate, onCancel }: { problem: Problem; candidate: Candidate; onCancel(): void }) {
   const editCandidate = useStore((s) => s.editCandidate)
+  const batchCount = candidate.findingBatches?.length ?? 0
   const commentCount = useStore((s) => s.comments.filter((comment) => comment.candidateId === candidate.id).length)
   const [label, setLabel] = useState(candidate.label)
   const [diff, setDiff] = useState(candidate.rawDiff)
@@ -62,7 +63,7 @@ function EditCandidate({ problem, candidate, onCancel }: { problem: Problem; can
       onSubmit={(event) => {
         event.preventDefault()
         if (!diff.trim()) return
-        if (diff !== candidate.rawDiff && commentCount > 0 && !confirm('Replacing this diff will permanently remove its comments. Continue?')) return
+        if (diff !== candidate.rawDiff && (commentCount > 0 || batchCount > 0) && !confirm(`Replacing this diff will permanently remove ${commentCount} comments and ${batchCount} finding batches. Export this review before continuing if you need a portable backup. Continue?`)) return
         editCandidate(problem.id, candidate.id, { label: label.trim() || candidate.label, rawDiff: diff })
         onCancel()
       }}

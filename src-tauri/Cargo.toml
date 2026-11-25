@@ -1,0 +1,16 @@
+[package]
+name = "diffy"
+version = "0.0.0"
+description = "Diffy desktop application"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "diffy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

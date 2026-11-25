@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:file": "vitest run",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "tauri": "tauri",
+    "desktop": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "@scalar/rust-fmt": "^0.3.0",

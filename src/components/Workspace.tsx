@@ -10,11 +10,17 @@ import { exportProblem } from './util'
 import { clearCodeHighlights, paintCodeHighlights, readCodeSelection, selectCodeIdentifier } from '../lib/codeSelection'
 import { categories, tagLabel } from '../lib/categories'
 
+import { FindingsPanel } from './FindingsPanel'
 export function Workspace({ id }: { id: string }) {
   const problem = useStore((s) => s.problems.find((p) => p.id === id))
   const [selected, setSelected] = useState<string>()
   const [secondId, setSecondId] = useState<string>()
   const [compare, setCompare] = useState(false)
+  const [citationFocus, setCitationFocus] = useState<{ file: string; side: 'old' | 'new'; lineNumber: number; requestId: number }>()
+  const focusCitation = (target: { file: string; side: 'old' | 'new'; lineNumber: number }) => {
+    setCitationFocus((current) => ({ ...target, requestId: (current?.requestId ?? 0) + 1 }))
+    if (target.side === 'old') setViewType('split')
+  }
   const [notesOpen, setNotesOpen] = useState(false)
   const editCandidate = useStore((s) => s.editCandidate)
   const [viewType, setViewType] = useState<'split' | 'unified'>('unified')
@@ -83,7 +89,7 @@ export function Workspace({ id }: { id: string }) {
           <a href={`#/p/${id}/digest`}>Digest</a>
           <a href={`#/p/${id}/review`}>Review</a>
         </header>
-        <CandidateTabs problem={problem} selectedId={first?.id} onSelect={setSelected} />
+        <CandidateTabs problem={problem} selectedId={first?.id} onSelect={(candidateId) => { setCitationFocus(undefined); setSelected(candidateId) }} />
         {first && (
           <textarea
             className="candidate-note"
@@ -125,8 +131,9 @@ export function Workspace({ id }: { id: string }) {
             </div>
           </div>
         ) : (
-          first && <DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} onHoverWord={hoverWordDelay.setHoveredWord} />
+          first && <div className="research-layout"><FindingsPanel key={first.id} problemId={problem.id} candidate={first} onFocus={focusCitation} /><DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} focus={citationFocus} onHoverWord={hoverWordDelay.setHoveredWord} /></div>
         )}
+        {first && compare && second && <p className="muted">Leave comparison mode to research findings for one patch at a time.</p>}
         <section className="tag-guide" aria-labelledby="tag-guide-title">
           <h2 id="tag-guide-title">Available tags</h2>
           <ul>{categories.map((category) => <li key={category.slug}><strong>{category.label}</strong> — {category.description}</li>)}</ul>

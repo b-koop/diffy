@@ -5,7 +5,7 @@ import { useStore, type Candidate } from '../store'
 import { FileDiff } from './FileDiff'
 import { summarizeDiffFiles } from '../lib/diffStats'
 
-export function DiffView({ candidate, viewType, openAll, query, onHoverWord }: { candidate: Candidate; viewType: 'split' | 'unified'; openAll: { open: boolean; version: number }; query: string; onHoverWord(word?: string): void }) {
+export function DiffView({ candidate, viewType, openAll, query, onHoverWord, focus }: { candidate: Candidate; viewType: 'split' | 'unified'; openAll: { open: boolean; version: number }; query: string; onHoverWord(word?: string): void; focus?: { file: string; side: 'old' | 'new'; lineNumber: number; requestId: number } }) {
   const allComments = useStore((s) => s.comments)
   const comments = useMemo(() => allComments.filter((c) => c.candidateId === candidate.id), [allComments, candidate.id])
   const parsed = useMemo(() => parseDiff(candidate.rawDiff), [candidate.rawDiff])
@@ -25,7 +25,7 @@ export function DiffView({ candidate, viewType, openAll, query, onHoverWord }: {
         {summary.filesChanged} file{summary.filesChanged === 1 ? '' : 's'} changed · <span className="diff-insertions">+{summary.additions} additions</span> · <span className="diff-deletions">−{summary.deletions} deletions</span>
       </p>
       {parsed.files.map((f) => (
-        <FileDiff key={f.path} file={f} candidateId={candidate.id} comments={comments} viewType={viewType} openAll={openAll} query={query} onHoverWord={onHoverWord} />
+        <FileDiff key={f.path} file={f} candidateId={candidate.id} comments={comments} viewType={viewType} openAll={openAll} query={query} focus={focus?.file === f.path ? focus : undefined} onHoverWord={onHoverWord} />
       ))}
     </div>
   )

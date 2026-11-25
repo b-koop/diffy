@@ -24,6 +24,10 @@ type ToolContext = { signal: AbortSignal }
 const emptySchema = { type: 'object', properties: {}, additionalProperties: false }
 const readAnnotations = { readOnlyHint: true, untrustedContentHint: true }
 const writeAnnotations = { readOnlyHint: false, untrustedContentHint: true }
+const candidateSchema = {
+  type: 'string',
+  description: 'Exact candidate ID or globally unique, case-sensitive candidate label. IDs take precedence.',
+}
 
 const requiredString = (input: ToolInput, key: string): string => {
   const value = input[key]
@@ -44,9 +48,15 @@ const positiveLine = (value: unknown, label: string): number => {
 }
 
 function findCandidate(store: ReviewStore, candidateId: string) {
-  for (const problem of store.getState().problems) {
-    const candidate = problem.candidates.find((item) => item.id === candidateId)
-    if (candidate) return { problem, candidate }
+  const candidates = store.getState().problems.flatMap((problem) =>
+    problem.candidates.map((candidate) => ({ problem, candidate })),
+  )
+  const exact = candidates.find(({ candidate }) => candidate.id === candidateId)
+  if (exact) return exact
+  const matches = candidates.filter(({ candidate }) => candidate.label === candidateId)
+  if (matches.length === 1) return matches[0]
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous candidate label: ${candidateId}. Use a candidate ID: ${matches.map(({ problem, candidate }) => `${candidate.id} (review ${problem.id})`).join(', ')}`)
   }
   throw new Error(`Candidate not found: ${candidateId}`)
 }
@@ -103,12 +113,12 @@ export function createReviewTools(store: ReviewStore): WebMcpTool[] {
         })),
       }
     }),
-    tool('list_files', 'List changed files', 'List changed files, change counts, and hunk counts for a candidate diff.', schema({ candidateId: { type: 'string' } }, ['candidateId']), readAnnotations, (input) => {
+    tool('list_files', 'List changed files', 'List changed files, change counts, and hunk counts for a candidate ID or unique label.', schema({ candidateId: candidateSchema }, ['candidateId']), readAnnotations, (input) => {
       const candidateId = requiredString(input, 'candidateId')
       const { problem, candidate } = findCandidate(store, candidateId)
       return parsedCandidate(store, candidateId).map((file) => ({
         reviewId: problem.id,
-        candidateId,
+        candidateId: candidate.id,
         candidateLabel: candidate.label,
         path: file.path,
         oldPath: file.oldPath,
@@ -120,7 +130,7 @@ export function createReviewTools(store: ReviewStore): WebMcpTool[] {
         hunkCount: file.hunks.length,
       }))
     }),
-    tool('get_file_diff', 'Read file diff', 'Read the hunks and changed lines for one file in a candidate diff.', schema({ candidateId: { type: 'string' }, file: { type: 'string' } }, ['candidateId', 'file']), readAnnotations, (input) => {
+    tool('get_file_diff', 'Read file diff', 'Read the hunks and changed lines for one file using a candidate ID or unique label.', schema({ candidateId: candidateSchema, file: { type: 'string' } }, ['candidateId', 'file']), readAnnotations, (input) => {
       const candidateId = requiredString(input, 'candidateId')
       const path = requiredString(input, 'file')
       const file = parsedCandidate(store, candidateId).find((item) => item.path === path)
@@ -170,9 +180,10 @@ export function createReviewTools(store: ReviewStore): WebMcpTool[] {
       }
       return matches
     }),
-    tool('list_comments', 'List comments', 'List review comments, with optional review, candidate, file, and status filters.', schema({ reviewId: { type: 'string' }, candidateId: { type: 'string' }, file: { type: 'string' }, status: { enum: ['approved', 'denied'] } }), readAnnotations, (input) => {
+    tool('list_comments', 'List comments', 'List review comments, with optional review, candidate ID or unique label, file, and status filters.', schema({ reviewId: { type: 'string' }, candidateId: candidateSchema, file: { type: 'string' }, status: { enum: ['approved', 'denied'] } }), readAnnotations, (input) => {
       const reviewId = optionalString(input, 'reviewId')
-      const candidateId = optionalString(input, 'candidateId')
+      const candidateRef = optionalString(input, 'candidateId')
+      const candidateId = candidateRef ? findCandidate(store, candidateRef).candidate.id : undefined
       const file = optionalString(input, 'file')
       const status = input.status
       if (status !== undefined && status !== 'approved' && status !== 'denied') throw new Error('status must be approved or denied.')
@@ -185,8 +196,26 @@ export function createReviewTools(store: ReviewStore): WebMcpTool[] {
         (status === undefined || (comment.status ?? 'approved') === status),
       )
     }),
-    tool('add_comment', 'Add review comment', 'Add a whole-file, single-line, or multiline range comment to a changed file.', schema({
-      candidateId: { type: 'string' },
+    tool('get_review_comments', 'Get review comments', 'Read all changed files and complete comments, including denied comments, grouped by candidate. Supply a candidate ID or unique label, or omit candidateId for all candidates.', schema({ candidateId: candidateSchema }), readAnnotations, (input) => {
+      const candidateRef = optionalString(input, 'candidateId')
+      const { problems, comments } = store.getState()
+      const selected = candidateRef
+        ? [findCandidate(store, candidateRef)]
+        : problems.flatMap((problem) => problem.candidates.map((candidate) => ({ problem, candidate })))
+      return selected.map(({ problem, candidate }) => ({
+        reviewId: problem.id,
+        reviewTitle: problem.title,
+        candidateId: candidate.id,
+        candidateLabel: candidate.label,
+        ...(candidate.note !== undefined && { note: candidate.note }),
+        files: parsedCandidate(store, candidate.id).map((file) => ({
+          file: file.path,
+          comments: comments.filter((comment) => comment.candidateId === candidate.id && comment.file === file.path),
+        })),
+      }))
+    }),
+    tool('add_comment', 'Add review comment', 'Add a whole-file, single-line, or multiline range comment using a candidate ID or unique label.', schema({
+      candidateId: candidateSchema,
       file: { type: 'string' },
       side: { enum: ['old', 'new'] },
       lineNumber: { type: 'integer', minimum: 1 },
@@ -194,7 +223,7 @@ export function createReviewTools(store: ReviewStore): WebMcpTool[] {
       tags: { type: 'array', items: { type: 'string' }, minItems: 1 },
       body: { type: 'string' },
     }, ['candidateId', 'file', 'tags', 'body']), writeAnnotations, (input) => {
-      const candidateId = requiredString(input, 'candidateId')
+      const candidateId = findCandidate(store, requiredString(input, 'candidateId')).candidate.id
       const filePath = requiredString(input, 'file')
       const tags = input.tags
       const body = input.body

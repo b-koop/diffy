@@ -34,7 +34,7 @@ describe('serializeProblem', () => {
     s().addComment({ ...two.line, tags: ['other tag'], body: 'b' })
     s().addCustomTag('unused')
     const file = JSON.parse(exportOf(one.p))
-    expect(file).toMatchObject({ version: 2, kind: 'diffy-problem', customTags: ['css leak'] })
+    expect(file).toMatchObject({ version: 3, kind: 'diffy-problem', customTags: ['css leak'] })
     expect(file.problem.id).toBe(one.p.id)
     expect(file.comments).toHaveLength(1)
     expect(file.comments[0].candidateId).toBe(one.c.id)
@@ -108,7 +108,7 @@ describe('parseProblemFile', () => {
     reject('nope', /valid JSON/)
     reject('{}')
     reject({ ...f, kind: 'other' })
-    reject({ ...f, version: 3 })
+    reject({ ...f, version: 4 })
     reject({ ...f, problem: { ...f.problem, title: 5 } })
     reject({ ...f, customTags: 'x' })
   })
@@ -135,5 +135,19 @@ describe('parseProblemFile', () => {
     const f = valid()
     f.comments[0].candidateId = 'elsewhere'
     reject(f, /not in the file/)
+  })
+  it('accepts v2 as the v3 in-memory contract and validates nested v3 finding decisions', () => {
+    const legacy = valid()
+    legacy.version = 2
+    expect(parseProblemFile(JSON.stringify(legacy)).version).toBe(3)
+    const current = valid()
+    current.problem.candidates[0].findingBatches = [{
+      id: 'batch',
+      rawText: 'raw batch',
+      findings: [{ id: 'finding', sourceNumber: '3', title: 'Same title', rawText: 'card', claim: 'claim', evidence: 'evidence', proposedFix: 'fix', findingAnswer: { decision: 'unreviewed', text: 'answer' }, fixAnswer: { decision: 'deny', text: '' } }],
+    }]
+    expect(parseProblemFile(JSON.stringify(current)).problem.candidates[0].findingBatches?.[0].findings[0].fixAnswer.decision).toBe('deny')
+    current.problem.candidates[0].findingBatches[0].findings[0].findingAnswer.decision = 'selected' as never
+    expect(() => parseProblemFile(JSON.stringify(current))).toThrow(/shape|finding/i)
   })
 })

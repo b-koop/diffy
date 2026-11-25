@@ -38,6 +38,7 @@ interface Props {
   viewType: 'split' | 'unified'
   openAll: { open: boolean; version: number }
   query: string
+  focus?: { file: string; side: 'old' | 'new'; lineNumber: number; requestId: number }
   onHoverWord(word?: string): void
 }
 
@@ -57,7 +58,7 @@ const languageFor = (path: string) => ({
   yml: 'yaml', sh: 'bash', sql: 'sql',
 } as Record<string, string>)[path.split('.').pop()?.toLowerCase() ?? '']
 
-export function FileDiff({ file, candidateId, comments, viewType, openAll, query, onHoverWord }: Props) {
+export function FileDiff({ file, candidateId, comments, viewType, openAll, query, onHoverWord, focus }: Props) {
   const addComment = useStore((s) => s.addComment)
   const [open, setOpen] = useState(openAll.open)
   const [headerPinned, setHeaderPinned] = useState(false)
@@ -65,6 +66,14 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
   const headerRef = useRef<HTMLDivElement>(null)
   const scrollToCollapsedHeader = useRef(false)
   useEffect(() => setOpen(openAll.open), [openAll.open, openAll.version])
+  useEffect(() => { if (focus?.file === file.path) setOpen(true) }, [focus?.requestId, focus?.file, file.path])
+  useLayoutEffect(() => {
+    if (!open || focus?.file !== file.path) return
+    const gutter = diffRef.current?.querySelector<HTMLElement>(`[data-comment-side="${focus.side}"][data-comment-line="${focus.lineNumber}"] .line-number`)
+    if (!gutter) return
+    gutter.scrollIntoView({ block: 'center', inline: 'nearest' })
+    gutter.focus({ preventScroll: true })
+  }, [open, focus?.requestId, focus?.file, focus?.side, focus?.lineNumber, file.path])
   useLayoutEffect(() => {
     if (open || !scrollToCollapsedHeader.current) return
     scrollToCollapsedHeader.current = false
@@ -127,6 +136,22 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
     setLinking(false)
     setLineInput('')
     setNotice('')
+  }
+  const selectLinkedLines = () => {
+    const values = lineInput.split(',').map((value) => value.trim())
+    const positions = values.map((value): Pos => ({ side: value.startsWith('-') || value.startsWith('−') ? 'old' : 'new', lineNumber: Number(value.replace(/^[-−+]/, '')) }))
+    if (values.some((value) => !/^[-−+]?[1-9]\d*$/.test(value)) || positions.some((position) => !locate(file.hunks, position.side, position.lineNumber))) {
+      setNotice('Enter line numbers present in this diff, such as 1,5,11 or -15,+24.')
+      return
+    }
+    setLinked(linkedPositions(file.hunks, positions))
+    setNotice('')
+  }
+  const commentOnLinkedLines = () => {
+    if (!linked.length) return
+    setCompose({ ...linked[0], lines: linked })
+    cancelLinks()
+    setOpen(true)
   }
 
   useEffect(() => {
@@ -347,30 +372,26 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
         <button type="button" className="secondary" onClick={() => setFileForm(true)}>
           Comment on file
         </button>
+        {linking && headerPinned && <div className="linked-selection-header">
+          <form className="row" onSubmit={(event) => { event.preventDefault(); selectLinkedLines() }}>
+            <label>Lines <input aria-label={`Lines to link in ${file.path} header`} value={lineInput} placeholder="1,5,11 or -15,+24" onChange={(event) => setLineInput(event.target.value)} /></label>
+            <button type="submit" className="secondary">Select lines</button>
+          </form>
+          <span className="muted" role="status">{linked.length ? `Selected: ${locationLabel({ ...linked[0], lines: linked }, file.hunks)}` : 'No lines selected.'}</span>
+          <button type="button" disabled={!linked.length} onClick={commentOnLinkedLines}>Comment on selected lines</button>
+          <button type="button" className="secondary" onClick={cancelLinks}>Cancel selection</button>
+          {notice && <span className="error" role="alert">{notice}</span>}
+        </div>}
       </div>
       {linking && <div className="widget linked-selection">
         <p className="help">Click line numbers to select or remove separate lines in this file. Enter numbers such as 1,5,11 or -15,+24: − is the old side, + is the new side. Esc cancels.</p>
-        <form className="row" onSubmit={(event) => {
-          event.preventDefault()
-          const values = lineInput.split(',').map((value) => value.trim())
-          const positions = values.map((value): Pos => ({ side: value.startsWith('-') || value.startsWith('−') ? 'old' : 'new', lineNumber: Number(value.replace(/^[-−+]/, '')) }))
-          if (values.some((value) => !/^[-−+]?[1-9]\d*$/.test(value)) || positions.some((p) => !locate(file.hunks, p.side, p.lineNumber))) {
-            setNotice('Enter line numbers present in this diff, such as 1,5,11 or -15,+24.')
-            return
-          }
-          setLinked(linkedPositions(file.hunks, positions))
-          setNotice('')
-        }}>
+        <form className="row" onSubmit={(event) => { event.preventDefault(); selectLinkedLines() }}>
           <label>Lines to link <input aria-label={`Lines to link in ${file.path}`} value={lineInput} placeholder="1,5,11 or -15,+24" onChange={(event) => setLineInput(event.target.value)} /></label>
           <button type="submit" className="secondary">Select lines</button>
         </form>
         <p role="status">{linked.length ? `Selected lines: ${locationLabel({ ...linked[0], lines: linked }, file.hunks)}` : 'No lines selected.'}</p>
         <div className="row">
-          <button type="button" disabled={!linked.length} onClick={() => {
-            setCompose({ ...linked[0], lines: linked })
-            cancelLinks()
-            setOpen(true)
-          }}>Comment on selected lines</button>
+          <button type="button" disabled={!linked.length} onClick={commentOnLinkedLines}>Comment on selected lines</button>
           <button type="button" className="secondary" onClick={cancelLinks}>Cancel selection</button>
         </div>
       </div>}
@@ -441,7 +462,7 @@ export function FileDiff({ file, candidateId, comments, viewType, openAll, query
             </Diff>
           </div>
         ))}
-      {notice && <p className="error pad" role="alert">{notice}</p>}
+      {notice && !headerPinned && <p className="error pad" role="alert">{notice}</p>}
     </section>
   )
 }

@@ -3,7 +3,7 @@ import type { Pos } from './snippet'
 import type { Candidate, Comment, Problem } from '../store'
 
 export interface ProblemFile {
-  version: 2
+  version: 3
   kind: 'diffy-problem'
   problem: Problem
   comments: Comment[]
@@ -23,8 +23,12 @@ export const isLinkedAnchor = (v: { lines?: unknown; side?: unknown; lineNumber?
     v.lines.every((p) => isPos(p) && Number.isInteger(p.lineNumber) && p.lineNumber > 0) &&
     new Set(v.lines.map((p: Pos) => `${p.side}:${p.lineNumber}`)).size === v.lines.length &&
     v.lines.some((p: Pos) => p.side === v.side && p.lineNumber === v.lineNumber))
+const isAnswer = (v: unknown) => isObj(v) && ['unreviewed', 'approve', 'deny', 'edit', 'cant-verify'].includes(String(v.decision)) && isStr(v.text)
+const isFinding = (v: unknown) => isObj(v) && isStr(v.id) && isStr(v.sourceNumber) && isStr(v.title) && isStr(v.rawText) && isStr(v.claim) && isStr(v.evidence) && isStr(v.proposedFix) && isAnswer(v.findingAnswer) && isAnswer(v.fixAnswer)
+const isFindingBatch = (v: unknown) => isObj(v) && isStr(v.id) && isStr(v.rawText) && arrOf(v.findings, isFinding) && new Set(v.findings.map((f) => f.id)).size === v.findings.length
 const isCandidate = (v: unknown): v is Candidate =>
-  isObj(v) && isStr(v.id) && isStr(v.label) && isStr(v.rawDiff) && (v.note === undefined || isStr(v.note))
+  isObj(v) && isStr(v.id) && isStr(v.label) && isStr(v.rawDiff) && (v.note === undefined || isStr(v.note)) &&
+  (v.findingBatches === undefined || (arrOf(v.findingBatches, isFindingBatch) && new Set(v.findingBatches.map((b) => b.id)).size === v.findingBatches.length))
 const isProblem = (v: unknown): v is Problem =>
   isObj(v) && isStr(v.id) && isStr(v.title) && isStr(v.askMarkdown) && arrOf(v.candidates, isCandidate)
 const isComment = (v: unknown): v is Comment =>
@@ -55,7 +59,7 @@ export function serializeProblem(problem: Problem, comments: Comment[], customTa
   const own = comments.filter((c) => ids.has(c.candidateId))
   const used = new Set(own.flatMap((c) => c.tags.map((t) => t.toLowerCase())))
   const file: ProblemFile = {
-    version: 2,
+    version: 3,
     kind: 'diffy-problem',
     problem,
     comments: own,
@@ -64,7 +68,7 @@ export function serializeProblem(problem: Problem, comments: Comment[], customTa
   return JSON.stringify(file, null, 2)
 }
 
-/** Throws a user-readable Error unless the text is a valid v2 review file. */
+/** Throws a user-readable Error unless the text is a valid v2/v3 review file. */
 export function parseProblemFile(json: string): ProblemFile {
   let data: unknown
   try {
@@ -75,15 +79,31 @@ export function parseProblemFile(json: string): ProblemFile {
   if (isObj(data) && data.version === 1) {
     throw new Error('Unsupported file: whole-store exports are no longer supported. Export each review on its own.')
   }
-  if (!isObj(data) || data.version !== 2 || data.kind !== 'diffy-problem') {
+  if (!isObj(data) || (data.version !== 2 && data.version !== 3) || data.kind !== 'diffy-problem') {
     throw new Error('Not a Diffy review file.')
   }
   if (!isProblem(data.problem) || !arrOf(data.comments, isComment) || !isStrArr(data.customTags)) {
     throw new Error('Review file has an unexpected shape.')
   }
+  for (const candidate of data.problem.candidates) {
+    if (!isCandidate(candidate)) throw new Error('Review file has invalid finding data.')
+    if (candidate.findingBatches) {
+      const batchIds = new Set<string>()
+      const findingIds = new Set<string>()
+      for (const batch of candidate.findingBatches) {
+        if (!isFindingBatch(batch)) throw new Error('Review file has invalid finding data.')
+        if (batchIds.has(batch.id)) throw new Error('Review file has duplicate finding batch IDs.')
+        batchIds.add(batch.id)
+        for (const finding of batch.findings) {
+          if (findingIds.has(finding.id)) throw new Error('Review file has duplicate finding IDs.')
+          findingIds.add(finding.id)
+        }
+      }
+    }
+  }
   const ids = new Set(data.problem.candidates.map((c) => c.id))
   if (data.comments.some((c) => !ids.has(c.candidateId))) {
     throw new Error('Review file has a comment on a candidate that is not in the file.')
   }
-  return data as unknown as ProblemFile
+  return { ...data, version: 3 } as unknown as ProblemFile
 }

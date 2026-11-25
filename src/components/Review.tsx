@@ -1,65 +1,10 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { buildReview, countsLine, reviewCounts, type StatusFilter } from '../lib/review'
-import { isDenied } from '../lib/digest'
-import { useStore, type Comment } from '../store'
-import { CommentForm } from './CommentForm'
-import { Chips, DeniedBadge, Snippet, StatusToggle } from './CommentView'
+import { useStore } from '../store'
+import { CommentCard } from './CommentCard'
 import { NotesModal } from './NotesModal'
 
-function ReviewRow({ comment, location, codeVisible, onToggleCode }: { comment: Comment; location: string; codeVisible: boolean; onToggleCode(): void }) {
-  const editComment = useStore((s) => s.editComment)
-  const deleteComment = useStore((s) => s.deleteComment)
-  const [editing, setEditing] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-
-  if (editing) {
-    return (
-      <li className="comment">
-        <div className="muted loc">{comment.file}[{location}]</div>
-        <CommentForm
-          initial={comment}
-          submitLabel="Save"
-          onSubmit={(tags, body) => {
-            editComment(comment.id, { tags, body })
-            setEditing(false)
-          }}
-          onCancel={() => setEditing(false)}
-        />
-      </li>
-    )
-  }
-  return (
-    <li className={isDenied(comment) ? 'comment denied' : 'comment'}>
-      <div className="muted loc">{comment.file}[{location}]{isDenied(comment) && <> <DeniedBadge /></>}</div>
-      <Chips tags={comment.tags} />
-      {comment.snippet && (
-        <>
-          <div className="row">
-            <button type="button" className="link" aria-expanded={codeVisible} aria-controls={`review-code-${comment.id}`} onClick={onToggleCode}>
-              {codeVisible ? 'Hide code' : 'Show code'}
-            </button>
-          </div>
-          <div id={`review-code-${comment.id}`} hidden={!codeVisible}><Snippet text={comment.snippet} /></div>
-        </>
-      )}
-      {comment.body && <p className="body">{comment.body}</p>}
-      <div className="row">
-        <StatusToggle comment={comment} />
-        <button type="button" className="link" onClick={() => setEditing(true)}>Edit</button>
-        {confirming ? (
-          <>
-            <span className="muted">Delete permanently?</span>
-            <button type="button" className="link" onClick={() => deleteComment(comment.id)}>Confirm delete</button>
-            <button type="button" className="link" onClick={() => setConfirming(false)}>Keep</button>
-          </>
-        ) : (
-          <button type="button" className="link" onClick={() => setConfirming(true)}>Delete</button>
-        )}
-      </div>
-    </li>
-  )
-}
 
 export function Review({ id }: { id: string }) {
   const problem = useStore((s) => s.problems.find((p) => p.id === id))
@@ -69,6 +14,7 @@ export function Review({ id }: { id: string }) {
   const [hiddenCode, setHiddenCode] = useState<Set<string>>(() => new Set())
 
   const groups = useMemo(() => (problem ? buildReview(problem, comments, filter) : []), [problem, comments, filter])
+  const candidateDiffs = useMemo(() => new Map(problem?.candidates.map((candidate) => [candidate.id, candidate.rawDiff] as const) ?? []), [problem])
   if (!problem) return <main><p>Review not found.</p><a href="#/">Back to reviews</a></main>
 
   return (
@@ -97,12 +43,12 @@ export function Review({ id }: { id: string }) {
         <section key={g.candidateId}>
           <h2>{g.label}</h2>
           <ul className="review-list">
-            {g.items.map((i) => <ReviewRow key={i.comment.id} comment={i.comment} location={i.location} codeVisible={!hiddenCode.has(i.comment.id)} onToggleCode={() => setHiddenCode((current) => {
+            {g.items.map((i) => <li key={i.comment.id}><CommentCard comment={i.comment} location={i.location} rawDiff={candidateDiffs.get(g.candidateId)} codeVisible={!hiddenCode.has(i.comment.id)} onToggleCode={() => setHiddenCode((current) => {
               const next = new Set(current)
               if (next.has(i.comment.id)) next.delete(i.comment.id)
               else next.add(i.comment.id)
               return next
-            })} />)}
+            })} /></li>)}
           </ul>
         </section>
       ))}
