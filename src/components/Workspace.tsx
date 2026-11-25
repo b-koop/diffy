@@ -10,6 +10,7 @@ import { exportProblem } from './util'
 import { clearCodeHighlights, paintCodeHighlights, readCodeSelection, selectCodeIdentifier } from '../lib/codeSelection'
 import { categories, tagLabel } from '../lib/categories'
 
+import { FindingImport } from './FindingImport'
 import { FindingsPanel } from './FindingsPanel'
 export function Workspace({ id }: { id: string }) {
   const problem = useStore((s) => s.problems.find((p) => p.id === id))
@@ -21,6 +22,7 @@ export function Workspace({ id }: { id: string }) {
     setCitationFocus((current) => ({ ...target, requestId: (current?.requestId ?? 0) + 1 }))
     if (target.side === 'old') setViewType('split')
   }
+  const [findingImportOpen, setFindingImportOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
   const editCandidate = useStore((s) => s.editCandidate)
   const [viewType, setViewType] = useState<'split' | 'unified'>('unified')
@@ -110,6 +112,7 @@ export function Workspace({ id }: { id: string }) {
                 <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /> Compare two
               </label>
             )}
+            {!first.findingBatches?.some((batch) => batch.findings.length > 0) && <button type="button" onClick={() => setFindingImportOpen(true)}>Import findings</button>}
             <button type="button" className="secondary" onClick={() => setOpenAll((state) => ({ open: true, version: state.version + 1 }))}>Expand all</button>
             <button type="button" className="secondary" onClick={() => setOpenAll((state) => ({ open: false, version: state.version + 1 }))}>Collapse all</button>
             <label className="diff-search">Search diff <input type="search" aria-label="Search diff" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
@@ -117,6 +120,7 @@ export function Workspace({ id }: { id: string }) {
             <button type="button" className="secondary" onClick={() => exportProblem(problem)}>Export</button>
           </div>
         )}
+        {findingImportOpen && first && <FindingImport problemId={problem.id} candidate={first} onClose={() => setFindingImportOpen(false)} onImported={() => setFindingImportOpen(false)} />}
         {notesOpen && <NotesModal problem={problem} onClose={() => setNotesOpen(false)} />}
         {first && <p className="muted hint">Hover a line and click + to comment. Drag + across lines, or click a line number then Shift-click another to select a range. Use “Link lines” for separate lines such as 1,5,11. Esc cancels selection.</p>}
         {first && compare && second ? (
@@ -131,7 +135,9 @@ export function Workspace({ id }: { id: string }) {
             </div>
           </div>
         ) : (
-          first && <div className="research-layout"><FindingsPanel key={first.id} problemId={problem.id} candidate={first} onFocus={focusCitation} /><DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} focus={citationFocus} onHoverWord={hoverWordDelay.setHoveredWord} /></div>
+          first && (first.findingBatches?.some((batch) => batch.findings.length > 0)
+            ? <div className="research-layout"><FindingsPanel key={first.id} problemId={problem.id} candidate={first} onFocus={focusCitation} /><DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} focus={citationFocus} onHoverWord={hoverWordDelay.setHoveredWord} /></div>
+            : <DiffView key={first.id} candidate={first} viewType={viewType} openAll={openAll} query={query} focus={citationFocus} onHoverWord={hoverWordDelay.setHoveredWord} />)
         )}
         {first && compare && second && <p className="muted">Leave comparison mode to research findings for one patch at a time.</p>}
         <section className="tag-guide" aria-labelledby="tag-guide-title">
