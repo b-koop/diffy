@@ -67,7 +67,7 @@ export function CommentForm({ initial, anchor, submitLabel, onSubmit, onCancel }
       </fieldset>}
       <textarea
         aria-label="Comment"
-        rows={3}
+        rows={8}
         placeholder={needsBody ? 'Required: say what the issue is and why it matters' : 'Optional note'}
         value={body}
         onChange={(e) => setBody(e.target.value)}
