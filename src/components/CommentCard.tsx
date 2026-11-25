@@ -1,17 +1,19 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { isDenied } from '../lib/digest'
 import { buildCommentAnchorPatch, type CommentAnchorDraft } from '../lib/commentAnchor'
-import { parseDiff } from '../lib/parseDiff'
+import { parseDiff, type Hunk } from '../lib/parseDiff'
+import { snippetLineNumbers } from '../lib/snippet'
 import { useStore, type Comment } from '../store'
 import { CommentForm } from './CommentForm'
 import { Chips, DeniedBadge, Snippet, StatusToggle } from './CommentView'
 
-export function CommentCard({ comment, location, codeVisible = true, onToggleCode, rawDiff }: {
+export function CommentCard({ comment, location, codeVisible = true, onToggleCode, rawDiff, hunks }: {
   comment: Comment
   location: string
   codeVisible?: boolean
   onToggleCode?: () => void
   rawDiff?: string
+  hunks?: Hunk[]
 }) {
   const editComment = useStore((s) => s.editComment)
   const deleteComment = useStore((s) => s.deleteComment)
@@ -21,6 +23,9 @@ export function CommentCard({ comment, location, codeVisible = true, onToggleCod
   const anchor: CommentAnchorDraft | undefined = comment.side !== undefined && comment.lineNumber !== undefined
     ? { side: comment.side, lineNumber: comment.lineNumber, end: comment.end, lines: comment.lines }
     : undefined
+  const lineNumbers = useMemo(() => hunks && comment.snippet && anchor
+    ? snippetLineNumbers(hunks, comment.snippet, anchor)
+    : undefined, [hunks, comment.snippet, comment.side, comment.lineNumber, comment.end, comment.lines])
 
   return (
     <div className={isDenied(comment) ? 'comment denied' : 'comment'}>
@@ -31,7 +36,7 @@ export function CommentCard({ comment, location, codeVisible = true, onToggleCod
             {visible ? 'Hide code' : 'Show code'}
           </button>
         </div>}
-        <div id={`review-code-${comment.id}`} hidden={!visible}><Snippet text={comment.snippet} /></div>
+        <div id={`review-code-${comment.id}`} hidden={!visible}><Snippet text={comment.snippet} lineNumbers={lineNumbers} /></div>
       </>}
       {editing ? <CommentForm initial={comment} anchor={rawDiff ? anchor : undefined} submitLabel="Save" onSubmit={(tags, body, editedAnchor) => {
         const anchorPatch = rawDiff && editedAnchor

@@ -5,6 +5,11 @@ export interface Pos {
   side: Side
   lineNumber: number
 }
+interface LocatedChange {
+  hunk: Hunk
+  index: number
+  change: Change
+}
 type Change = Hunk['changes'][number]
 
 const matches = (c: Change, side: Side, lineNumber: number) =>
@@ -12,11 +17,11 @@ const matches = (c: Change, side: Side, lineNumber: number) =>
     ? (c.type === 'insert' && c.lineNumber === lineNumber) || (c.type === 'normal' && c.newLineNumber === lineNumber)
     : (c.type === 'delete' && c.lineNumber === lineNumber) || (c.type === 'normal' && c.oldLineNumber === lineNumber)
 
-const render = (changes: Change[]) =>
-  changes.map((c) => (c.type === 'insert' ? '+' : c.type === 'delete' ? '-' : ' ') + c.content).join('\n')
+const renderChange = (c: Change) => (c.type === 'insert' ? '+' : c.type === 'delete' ? '-' : ' ') + c.content
+const render = (changes: Change[]) => changes.map(renderChange).join('\n')
 
 /** The hunk and change index holding the line, or undefined. */
-export function locate(hunks: Hunk[], side: Side, lineNumber: number) {
+export function locate(hunks: Hunk[], side: Side, lineNumber: number): LocatedChange | undefined {
   for (const hunk of hunks) {
     const index = hunk.changes.findIndex((c) => matches(c, side, lineNumber))
     if (index !== -1) return { hunk, index, change: hunk.changes[index] }
@@ -58,11 +63,59 @@ export function linkedPositions(hunks: Hunk[], lines: Pos[]): Pos[] {
 export function makeLinkedSnippet(hunks: Hunk[], lines: Pos[]): string {
   if (!lines.length || lines.some((p) => !locate(hunks, p.side, p.lineNumber))) return ''
   const ordered = linkedPositions(hunks, lines)
-  let previous: ReturnType<typeof locate>
+  let previous: LocatedChange | undefined
   return ordered.map((p) => {
     const row = locate(hunks, p.side, p.lineNumber)!
     const gap = previous && (previous.hunk !== row.hunk || row.index !== previous.index + 1) ? '…\n' : ''
     previous = row
-    return gap + render([row.change])
+    return gap + renderChange(row.change)
   }).join('\n')
+}
+
+export interface SnippetLineNumbers {
+  oldLineNumber?: number
+  newLineNumber?: number
+}
+
+/** Line numbers for a saved snippet, or undefined if the current diff no longer matches it. */
+export function snippetLineNumbers(
+  hunks: Hunk[],
+  text: string,
+  anchor: Pos & { end?: Pos; lines?: Pos[] },
+): (SnippetLineNumbers | undefined)[] | undefined {
+  let changes: (Change | undefined)[]
+  if (anchor.lines) {
+    const ordered = linkedPositions(hunks, anchor.lines)
+    changes = []
+    let previous: LocatedChange | undefined
+    for (const position of ordered) {
+      const row = locate(hunks, position.side, position.lineNumber)
+      if (!row) return undefined
+      if (previous && (previous.hunk !== row.hunk || row.index !== previous.index + 1)) changes.push(undefined)
+      changes.push(row.change)
+      previous = row
+    }
+  } else if (anchor.end) {
+    const range = rangeChanges(hunks, anchor, anchor.end)
+    if (!range) return undefined
+    changes = range
+  } else {
+    const row = locate(hunks, anchor.side, anchor.lineNumber)
+    if (!row) return undefined
+    changes = row.hunk.changes.slice(Math.max(0, row.index - 3), row.index + 4)
+  }
+
+  const rows: ({ text: string } & SnippetLineNumbers)[] = changes.map((change) => {
+    if (!change) return { text: '…' }
+    const text = renderChange(change)
+    switch (change.type) {
+      case 'normal': return { text, oldLineNumber: change.oldLineNumber, newLineNumber: change.newLineNumber }
+      case 'delete': return { text, oldLineNumber: change.lineNumber }
+      case 'insert': return { text, newLineNumber: change.lineNumber }
+    }
+  })
+  if (rows.map((row) => row.text).join('\n') !== text) return undefined
+  return rows.map(({ oldLineNumber, newLineNumber }) => oldLineNumber === undefined && newLineNumber === undefined
+    ? undefined
+    : { oldLineNumber, newLineNumber })
 }

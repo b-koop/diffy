@@ -8,6 +8,7 @@ export type StatusFilter = 'all' | 'approved' | 'denied'
 export interface ReviewItem {
   comment: Comment
   location: string
+  hunks: Hunk[]
 }
 
 export interface ReviewGroup {
@@ -46,7 +47,10 @@ export function buildReview(problem: Problem, comments: Comment[], filter: Statu
     const items = comments
       .filter((c) => c.candidateId === cand.id && (filter === 'all' || (filter === 'denied') === isDenied(c)))
       .sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : byLine(a, b)))
-      .map((comment) => ({ comment, location: locationLabel(comment, hunksByFile.get(comment.file) ?? []) }))
+      .map((comment) => {
+        const hunks = hunksByFile.get(comment.file) ?? []
+        return { comment, location: locationLabel(comment, hunks), hunks }
+      })
     return { candidateId: cand.id, label: cand.label, items }
   })
 }

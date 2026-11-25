@@ -170,6 +170,10 @@ footer { margin-top: 24px; font-size: .85rem; }
 .digest-file { margin-bottom: 24px; }
 .snippet { font: 12px/1.4 ui-monospace, monospace; background: var(--panel); padding: 6px; margin: 6px 0; overflow: auto; }
 .snippet span { display: block; } .snippet .add { background: var(--add); } .snippet .del { background: var(--del); }
+.snippet .snippet-headings, .snippet .snippet-row { display: grid; grid-template-columns: 7ch minmax(0, 1fr); gap: 8px; }
+.snippet .snippet-numbers { display: grid; grid-template-columns: 3ch 3ch; gap: 1ch; color: var(--muted); text-align: right; user-select: none; }
+.snippet .snippet-code { min-width: 0; white-space: pre; }
+.snippet .snippet-headings { color: var(--muted); font-size: .8em; }
 .hint { font-size: .85rem; margin: 4px 0; } .loc { font-family: ui-monospace, monospace; font-size: .8rem; }
 .file-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; top: 0; z-index: 5; padding: 8px; background: var(--panel); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; box-shadow: 0 1px 0 var(--border); }
 .file-sticky-marker { display: block; height: 1px; margin-bottom: -1px; pointer-events: none; }

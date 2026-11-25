@@ -39,19 +39,23 @@ export function Review({ id }: { id: string }) {
         <button type="button" className="primary-big" onClick={() => setNotesOpen(true)}>Output notes</button>
       </div>
       {groups.every((g) => g.items.length === 0) && <p className="muted">No comments{filter === 'all' ? '' : ` that are ${filter}`}.</p>}
-      {groups.filter((g) => g.items.length > 0).map((g) => (
-        <section key={g.candidateId}>
-          <h2>{g.label}</h2>
-          <ul className="review-list">
-            {g.items.map((i) => <li key={i.comment.id}><CommentCard comment={i.comment} location={i.location} rawDiff={candidateDiffs.get(g.candidateId)} codeVisible={!hiddenCode.has(i.comment.id)} onToggleCode={() => setHiddenCode((current) => {
-              const next = new Set(current)
-              if (next.has(i.comment.id)) next.delete(i.comment.id)
-              else next.add(i.comment.id)
-              return next
-            })} /></li>)}
-          </ul>
-        </section>
-      ))}
+      {groups.filter((g) => g.items.length > 0).map((g) => {
+        return (
+          <section key={g.candidateId}>
+            <h2>{g.label}</h2>
+            <ul className="review-list">
+              {g.items.map((i) => {
+                return <li key={i.comment.id}><CommentCard comment={i.comment} location={i.location} rawDiff={candidateDiffs.get(g.candidateId)} hunks={i.hunks} codeVisible={!hiddenCode.has(i.comment.id)} onToggleCode={() => setHiddenCode((current) => {
+                  const next = new Set(current)
+                  if (next.has(i.comment.id)) next.delete(i.comment.id)
+                  else next.add(i.comment.id)
+                  return next
+                })} /></li>
+              })}
+            </ul>
+          </section>
+        )
+      })}
       {notesOpen && <NotesModal problem={problem} onClose={() => setNotesOpen(false)} />}
     </main>
   )

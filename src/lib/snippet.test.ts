@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseDiff } from './parseDiff'
-import { makeRangeSnippet, makeSnippet } from './snippet'
+import { makeLinkedSnippet, makeRangeSnippet, makeSnippet, snippetLineNumbers } from './snippet'
 
 const diff = `diff --git a/a.txt b/a.txt
 index 111..222 100644
@@ -77,5 +77,46 @@ describe('makeRangeSnippet', () => {
   it('rejects reversed ranges and unknown lines', () => {
     expect(makeRangeSnippet(multi, { side: 'new', lineNumber: 3 }, { side: 'new', lineNumber: 2 })).toBe('')
     expect(makeRangeSnippet(multi, { side: 'new', lineNumber: 1 }, { side: 'new', lineNumber: 99 })).toBe('')
+  })
+})
+
+describe('snippetLineNumbers', () => {
+  it('shows both sides of context and the correct side for removed and added code', () => {
+    const text = makeSnippet(hunks, 'new', 4)
+    expect(snippetLineNumbers(hunks, text, { side: 'new', lineNumber: 4 })).toEqual([
+      { oldLineNumber: 2, newLineNumber: 2 },
+      { oldLineNumber: 3, newLineNumber: 3 },
+      { oldLineNumber: 4 },
+      { newLineNumber: 4 },
+      { oldLineNumber: 5, newLineNumber: 5 },
+      { oldLineNumber: 6, newLineNumber: 6 },
+      { oldLineNumber: 7, newLineNumber: 7 },
+    ])
+  })
+
+
+  it('shows both line numbers for each row in a saved range', () => {
+    const start = { side: 'new' as const, lineNumber: 1 }
+    const end = { side: 'new' as const, lineNumber: 3 }
+    const text = makeRangeSnippet(multi, start, end)
+    expect(snippetLineNumbers(multi, text, { ...start, end })).toEqual([
+      { oldLineNumber: 1, newLineNumber: 1 },
+      { oldLineNumber: 2 },
+      { newLineNumber: 2 },
+      { newLineNumber: 3 },
+    ])
+  })
+  it('shows linked code numbers while leaving omitted lines unnumbered', () => {
+    const lines = [{ side: 'new' as const, lineNumber: 1 }, { side: 'new' as const, lineNumber: 21 }]
+    const text = makeLinkedSnippet(multi, lines)
+    expect(snippetLineNumbers(multi, text, { ...lines[0], lines })).toEqual([
+      { oldLineNumber: 1, newLineNumber: 1 },
+      undefined,
+      { newLineNumber: 21 },
+    ])
+  })
+
+  it('does not assign line numbers when a saved snippet no longer matches the diff', () => {
+    expect(snippetLineNumbers(hunks, ' stale line', { side: 'new', lineNumber: 4 })).toBeUndefined()
   })
 })

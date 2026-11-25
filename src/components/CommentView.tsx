@@ -6,6 +6,7 @@ import type { Hunk } from '../lib/parseDiff'
 import { isDenied } from '../lib/digest'
 import { useStore } from '../store'
 import { CommentForm } from './CommentForm'
+import type { SnippetLineNumbers } from '../lib/snippet'
 
 export const Chips = ({ tags }: { tags: string[] }) => (
   <span className="chips">
@@ -17,13 +18,19 @@ export const Chips = ({ tags }: { tags: string[] }) => (
   </span>
 )
 
-export const Snippet = ({ text }: { text: string }) => (
+export const Snippet = ({ text, lineNumbers }: { text: string; lineNumbers?: (SnippetLineNumbers | undefined)[] }) => (
   <pre className="snippet">
-    {text.split('\n').map((l, i) => (
-      <span key={i} className={l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : ''}>
-        {l || ' '}
-      </span>
-    ))}
+    {lineNumbers && <span className="snippet-headings"><span className="snippet-numbers"><span>old</span><span>new</span></span><span /></span>}
+    {text.split('\n').map((line, i) => {
+      const className = line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : ''
+      const numbers = lineNumbers?.[i]
+      return lineNumbers
+        ? <span key={i} className={`snippet-row ${className}`}>
+            <span className="snippet-numbers"><span>{numbers?.oldLineNumber ?? ''}</span><span>{numbers?.newLineNumber ?? ''}</span></span>
+            <span className="snippet-code">{line || ' '}</span>
+          </span>
+        : <span key={i} className={className}>{line || ' '}</span>
+    })}
   </pre>
 )
 
